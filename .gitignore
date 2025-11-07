@@ -1,0 +1,96 @@
+# Build results
+**/bin/
+**/obj/
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+**/out/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+appsettings.Development.json
+appsettings.Production.json
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Database
+*.db
+*.sqlite
+*.mdf
+*.ldf
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+
+# NuGet
+**/packages/
+*.nupkg
+*.snupkg
+
+# Test results
+**/TestResults/
+**/coverage/
+**/.coverage
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+
+# TypeScript
+*.tsbuildinfo
+
+# Next.js
+.next/
+out/
+.vercel
+
+# .NET
+*.user
+*.suo
+*.cache
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+*.sln.iml
+

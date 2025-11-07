@@ -1,0 +1,13 @@
+using HiHSK.Application.DTOs;
+
+namespace HiHSK.Application.Interfaces;
+
+public interface IVocabularyService
+{
+    Task<List<VocabularyTopicDto>> GetAllTopicsAsync(string? userId = null);
+    Task<VocabularyTopicDetailDto?> GetTopicByIdAsync(int topicId, string? userId = null);
+    Task<List<FlashcardReviewDto>> GetWordsForReviewAsync(int topicId, string userId, bool onlyDue = true, int? limit = null);
+    Task<ReviewStatsDto> GetTopicStatsAsync(int topicId, string userId);
+    Task<ReviewStatsDto> GetOverallStatsAsync(string userId);
+}
+

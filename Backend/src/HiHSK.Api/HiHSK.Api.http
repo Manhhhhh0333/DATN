@@ -1,0 +1,6 @@
+@HiHSK.Api_HostAddress = http://localhost:5075
+
+GET {{HiHSK.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

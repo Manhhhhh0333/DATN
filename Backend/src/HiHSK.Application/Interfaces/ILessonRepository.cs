@@ -12,6 +12,8 @@ public interface ILessonRepository
     Task<List<Lesson>> GetCompletedLessonsAsync(string userId, int courseId);
     Task<Lesson?> GetNextLessonAsync(int courseId, int currentLessonIndex);
     Task<List<Lesson>> GetLessonsByHSKLevelAsync(int hskLevel);
+    Task<int> CountWordsByLessonIdAsync(int lessonId);
+    Task<int> CountQuestionsByLessonIdAsync(int lessonId);
 }
 
 

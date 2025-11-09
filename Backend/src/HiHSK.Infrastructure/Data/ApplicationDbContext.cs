@@ -50,6 +50,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<MeasureWordExample> MeasureWordExamples { get; set; }
     public DbSet<WordMeasureWord> WordMeasureWords { get; set; }
 
+    // ============ WORD EXAMPLE ENTITIES ============
+    public DbSet<WordExample> WordExamples { get; set; }
+
     // ============ WRITING ENTITIES ============
     public DbSet<WritingExercise> WritingExercises { get; set; }
 
@@ -183,6 +186,11 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.PrerequisiteTopicId)
                 .OnDelete(DeleteBehavior.NoAction);
 
+            // Ignore navigation property Words vì column TopicId chưa tồn tại trong database
+            // Nếu không ignore, EF sẽ tự động tạo shadow property TopicId1
+            // Khi nào có column TopicId trong database, bỏ ignore này và cấu hình relationship ở phía Word
+            entity.Ignore(e => e.Words);
+
             entity.HasIndex(e => new { e.HSKLevel, e.TopicIndex });
             entity.HasIndex(e => e.PrerequisiteTopicId);
         });
@@ -246,15 +254,43 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.LessonId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasOne(e => e.Topic)
-                .WithMany(t => t.Words)
-                .HasForeignKey(e => e.TopicId)
-                .OnDelete(DeleteBehavior.SetNull);
+            // TopicId relationship với LessonTopic
+            // LƯU Ý: Column TopicId chưa tồn tại trong database
+            // Cần tạo migration để thêm column TopicId vào bảng Words trước khi sử dụng
+            // Tạm thời ignore để tránh lỗi, nhưng cấu hình relationship ở phía LessonTopic
+            entity.Ignore(e => e.TopicId);
+            entity.Ignore(e => e.Topic);
+            
+            // Relationship được cấu hình ở phía LessonTopic để tránh EF tạo shadow property TopicId1
 
             entity.HasIndex(e => e.LessonId);
-            entity.HasIndex(e => e.TopicId);
             entity.HasIndex(e => e.HSKLevel);
             entity.HasIndex(e => e.Character);
+        });
+
+        // ============ WORD EXAMPLE ============
+        builder.Entity<WordExample>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Character)
+                .IsRequired()
+                .HasMaxLength(500);
+            entity.Property(e => e.Pinyin)
+                .IsRequired()
+                .HasMaxLength(500);
+            entity.Property(e => e.Meaning)
+                .IsRequired()
+                .HasMaxLength(500);
+            entity.Property(e => e.SortOrder)
+                .IsRequired()
+                .HasDefaultValue(0);
+
+            entity.HasOne(e => e.Word)
+                .WithMany(w => w.WordExamples)
+                .HasForeignKey(e => e.WordId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.WordId);
         });
 
         // ============ VOCABULARY TOPIC ============
@@ -342,13 +378,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.LessonId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasOne(e => e.Exercise)
-                .WithMany(ex => ex.Dialogues)
-                .HasForeignKey(e => e.ExerciseId)
-                .OnDelete(DeleteBehavior.SetNull);
+            // ExerciseId relationship - Comment out nếu column chưa tồn tại trong database
+            // entity.HasOne(e => e.Exercise)
+            //     .WithMany(ex => ex.Dialogues)
+            //     .HasForeignKey(e => e.ExerciseId)
+            //     .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => e.LessonId);
-            entity.HasIndex(e => e.ExerciseId);
+            // entity.HasIndex(e => e.ExerciseId); // Comment out nếu column chưa tồn tại
             entity.HasIndex(e => e.DifficultyLevel);
             entity.HasIndex(e => e.Category);
         });
@@ -393,13 +430,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.LessonId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasOne(e => e.Exercise)
-                .WithMany(ex => ex.ReadingPassages)
-                .HasForeignKey(e => e.ExerciseId)
-                .OnDelete(DeleteBehavior.SetNull);
+            // ExerciseId relationship - Comment out nếu column chưa tồn tại trong database
+            // entity.HasOne(e => e.Exercise)
+            //     .WithMany(ex => ex.ReadingPassages)
+            //     .HasForeignKey(e => e.ExerciseId)
+            //     .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => e.LessonId);
-            entity.HasIndex(e => e.ExerciseId);
+            // entity.HasIndex(e => e.ExerciseId); // Comment out nếu column chưa tồn tại
             entity.HasIndex(e => e.DifficultyLevel);
         });
 
@@ -461,13 +499,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.SentencePatternId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasOne(e => e.Exercise)
-                .WithMany(ex => ex.Questions)
-                .HasForeignKey(e => e.ExerciseId)
-                .OnDelete(DeleteBehavior.SetNull);
+            // ExerciseId relationship - Comment out nếu column chưa tồn tại trong database
+            // entity.HasOne(e => e.Exercise)
+            //     .WithMany(ex => ex.Questions)
+            //     .HasForeignKey(e => e.ExerciseId)
+            //     .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => e.LessonId);
-            entity.HasIndex(e => e.ExerciseId);
+            // entity.HasIndex(e => e.ExerciseId); // Comment out nếu column chưa tồn tại
             entity.HasIndex(e => e.QuestionType);
             entity.HasIndex(e => e.ReadingPassageId);
             entity.HasIndex(e => e.DialogueId);
@@ -566,13 +605,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.LessonId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasOne(e => e.Exercise)
-                .WithMany(ex => ex.SentencePatterns)
-                .HasForeignKey(e => e.ExerciseId)
-                .OnDelete(DeleteBehavior.SetNull);
+            // ExerciseId relationship - Comment out nếu column chưa tồn tại trong database
+            // entity.HasOne(e => e.Exercise)
+            //     .WithMany(ex => ex.SentencePatterns)
+            //     .HasForeignKey(e => e.ExerciseId)
+            //     .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => e.LessonId);
-            entity.HasIndex(e => e.ExerciseId);
+            // entity.HasIndex(e => e.ExerciseId); // Comment out nếu column chưa tồn tại
         });
 
         // ============ SENTENCE PATTERN EXAMPLE ============

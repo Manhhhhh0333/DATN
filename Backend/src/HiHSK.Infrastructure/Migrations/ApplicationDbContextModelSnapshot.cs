@@ -202,6 +202,9 @@ namespace HiHSK.Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(1);
 
+                    b.Property<int?>("ExerciseId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("LessonId")
                         .HasColumnType("int");
 
@@ -228,6 +231,8 @@ namespace HiHSK.Infrastructure.Migrations
                     b.HasIndex("Category");
 
                     b.HasIndex("DifficultyLevel");
+
+                    b.HasIndex("ExerciseId");
 
                     b.HasIndex("LessonId");
 
@@ -558,6 +563,119 @@ namespace HiHSK.Infrastructure.Migrations
                     b.ToTable("Lessons");
                 });
 
+            modelBuilder.Entity("HiHSK.Domain.Entities.LessonExercise", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETDATE()");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int>("ExerciseIndex")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ExerciseType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsLocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int?>("PrerequisiteExerciseId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("TopicId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PrerequisiteExerciseId");
+
+                    b.HasIndex("TopicId", "ExerciseIndex");
+
+                    b.ToTable("LessonExercises");
+                });
+
+            modelBuilder.Entity("HiHSK.Domain.Entities.LessonTopic", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("CourseId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETDATE()");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<int?>("HSKLevel")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ImageUrl")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsLocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int?>("PrerequisiteTopicId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("TopicIndex")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId");
+
+                    b.HasIndex("PrerequisiteTopicId");
+
+                    b.HasIndex("HSKLevel", "TopicIndex");
+
+                    b.ToTable("LessonTopics");
+                });
+
             modelBuilder.Entity("HiHSK.Domain.Entities.MeasureWord", b =>
                 {
                     b.Property<int>("Id")
@@ -664,6 +782,9 @@ namespace HiHSK.Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(1);
 
+                    b.Property<int?>("ExerciseId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Explanation")
                         .HasColumnType("nvarchar(max)");
 
@@ -695,6 +816,8 @@ namespace HiHSK.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DialogueId");
+
+                    b.HasIndex("ExerciseId");
 
                     b.HasIndex("LessonId");
 
@@ -818,6 +941,9 @@ namespace HiHSK.Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(1);
 
+                    b.Property<int?>("ExerciseId")
+                        .HasColumnType("int");
+
                     b.Property<string>("ImageUrl")
                         .HasColumnType("nvarchar(max)");
 
@@ -845,6 +971,8 @@ namespace HiHSK.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DifficultyLevel");
+
+                    b.HasIndex("ExerciseId");
 
                     b.HasIndex("LessonId");
 
@@ -906,6 +1034,9 @@ namespace HiHSK.Infrastructure.Migrations
                     b.Property<string>("ExampleSentences")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<int?>("ExerciseId")
+                        .HasColumnType("int");
+
                     b.Property<int?>("LessonId")
                         .HasColumnType("int");
 
@@ -928,6 +1059,8 @@ namespace HiHSK.Infrastructure.Migrations
                         .HasColumnType("nvarchar(1000)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ExerciseId");
 
                     b.HasIndex("LessonId");
 
@@ -1727,6 +1860,9 @@ namespace HiHSK.Infrastructure.Migrations
                     b.Property<int?>("StrokeCount")
                         .HasColumnType("int");
 
+                    b.Property<int?>("TopicId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Character");
@@ -1735,7 +1871,50 @@ namespace HiHSK.Infrastructure.Migrations
 
                     b.HasIndex("LessonId");
 
+                    b.HasIndex("TopicId");
+
                     b.ToTable("Words");
+                });
+
+            modelBuilder.Entity("HiHSK.Domain.Entities.WordExample", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AudioUrl")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Character")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Meaning")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Pinyin")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WordId");
+
+                    b.ToTable("WordExamples");
                 });
 
             modelBuilder.Entity("HiHSK.Domain.Entities.WordMeasureWord", b =>
@@ -1975,10 +2154,16 @@ namespace HiHSK.Infrastructure.Migrations
 
             modelBuilder.Entity("HiHSK.Domain.Entities.Dialogue", b =>
                 {
+                    b.HasOne("HiHSK.Domain.Entities.LessonExercise", "Exercise")
+                        .WithMany("Dialogues")
+                        .HasForeignKey("ExerciseId");
+
                     b.HasOne("HiHSK.Domain.Entities.Lesson", "Lesson")
                         .WithMany("Dialogues")
                         .HasForeignKey("LessonId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Exercise");
 
                     b.Navigation("Lesson");
                 });
@@ -2099,6 +2284,41 @@ namespace HiHSK.Infrastructure.Migrations
                     b.Navigation("PrerequisiteLesson");
                 });
 
+            modelBuilder.Entity("HiHSK.Domain.Entities.LessonExercise", b =>
+                {
+                    b.HasOne("HiHSK.Domain.Entities.LessonExercise", "PrerequisiteExercise")
+                        .WithMany("PrerequisiteForExercises")
+                        .HasForeignKey("PrerequisiteExerciseId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("HiHSK.Domain.Entities.LessonTopic", "Topic")
+                        .WithMany("Exercises")
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("PrerequisiteExercise");
+
+                    b.Navigation("Topic");
+                });
+
+            modelBuilder.Entity("HiHSK.Domain.Entities.LessonTopic", b =>
+                {
+                    b.HasOne("HiHSK.Domain.Entities.Course", "Course")
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("HiHSK.Domain.Entities.LessonTopic", "PrerequisiteTopic")
+                        .WithMany("PrerequisiteForTopics")
+                        .HasForeignKey("PrerequisiteTopicId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.Navigation("Course");
+
+                    b.Navigation("PrerequisiteTopic");
+                });
+
             modelBuilder.Entity("HiHSK.Domain.Entities.MeasureWordExample", b =>
                 {
                     b.HasOne("HiHSK.Domain.Entities.MeasureWord", "MeasureWord")
@@ -2117,6 +2337,10 @@ namespace HiHSK.Infrastructure.Migrations
                         .HasForeignKey("DialogueId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("HiHSK.Domain.Entities.LessonExercise", "Exercise")
+                        .WithMany("Questions")
+                        .HasForeignKey("ExerciseId");
+
                     b.HasOne("HiHSK.Domain.Entities.Lesson", "Lesson")
                         .WithMany("Questions")
                         .HasForeignKey("LessonId")
@@ -2133,6 +2357,8 @@ namespace HiHSK.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Dialogue");
+
+                    b.Navigation("Exercise");
 
                     b.Navigation("Lesson");
 
@@ -2154,10 +2380,16 @@ namespace HiHSK.Infrastructure.Migrations
 
             modelBuilder.Entity("HiHSK.Domain.Entities.ReadingPassage", b =>
                 {
+                    b.HasOne("HiHSK.Domain.Entities.LessonExercise", "Exercise")
+                        .WithMany("ReadingPassages")
+                        .HasForeignKey("ExerciseId");
+
                     b.HasOne("HiHSK.Domain.Entities.Lesson", "Lesson")
                         .WithMany("ReadingPassages")
                         .HasForeignKey("LessonId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Exercise");
 
                     b.Navigation("Lesson");
                 });
@@ -2183,10 +2415,16 @@ namespace HiHSK.Infrastructure.Migrations
 
             modelBuilder.Entity("HiHSK.Domain.Entities.SentencePattern", b =>
                 {
+                    b.HasOne("HiHSK.Domain.Entities.LessonExercise", "Exercise")
+                        .WithMany("SentencePatterns")
+                        .HasForeignKey("ExerciseId");
+
                     b.HasOne("HiHSK.Domain.Entities.Lesson", "Lesson")
                         .WithMany("SentencePatterns")
                         .HasForeignKey("LessonId")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Exercise");
 
                     b.Navigation("Lesson");
                 });
@@ -2479,7 +2717,24 @@ namespace HiHSK.Infrastructure.Migrations
                         .HasForeignKey("LessonId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("HiHSK.Domain.Entities.LessonTopic", "Topic")
+                        .WithMany("Words")
+                        .HasForeignKey("TopicId");
+
                     b.Navigation("Lesson");
+
+                    b.Navigation("Topic");
+                });
+
+            modelBuilder.Entity("HiHSK.Domain.Entities.WordExample", b =>
+                {
+                    b.HasOne("HiHSK.Domain.Entities.Word", "Word")
+                        .WithMany("WordExamples")
+                        .HasForeignKey("WordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Word");
                 });
 
             modelBuilder.Entity("HiHSK.Domain.Entities.WordMeasureWord", b =>
@@ -2659,6 +2914,28 @@ namespace HiHSK.Infrastructure.Migrations
                     b.Navigation("WritingExercises");
                 });
 
+            modelBuilder.Entity("HiHSK.Domain.Entities.LessonExercise", b =>
+                {
+                    b.Navigation("Dialogues");
+
+                    b.Navigation("PrerequisiteForExercises");
+
+                    b.Navigation("Questions");
+
+                    b.Navigation("ReadingPassages");
+
+                    b.Navigation("SentencePatterns");
+                });
+
+            modelBuilder.Entity("HiHSK.Domain.Entities.LessonTopic", b =>
+                {
+                    b.Navigation("Exercises");
+
+                    b.Navigation("PrerequisiteForTopics");
+
+                    b.Navigation("Words");
+                });
+
             modelBuilder.Entity("HiHSK.Domain.Entities.MeasureWord", b =>
                 {
                     b.Navigation("MeasureWordExamples");
@@ -2728,6 +3005,8 @@ namespace HiHSK.Infrastructure.Migrations
                     b.Navigation("UserReadingWordMarks");
 
                     b.Navigation("UserWordProgresses");
+
+                    b.Navigation("WordExamples");
 
                     b.Navigation("WordMeasureWords");
 

@@ -22,6 +22,22 @@ export const API_ENDPOINTS = {
     BY_HSK_LEVEL: (hskLevel: number) => `/api/lessons/hsk/${hskLevel}`,
   },
   
+  // Lesson Topics
+  LESSON_TOPICS: {
+    BASE: "/api/lessontopics",
+    BY_ID: (id: number) => `/api/lessontopics/${id}`,
+    BY_HSK_LEVEL: (hskLevel: number) => `/api/lessontopics/hsk/${hskLevel}`,
+    UNLOCK_STATUS: (id: number) => `/api/lessontopics/${id}/unlock-status`,
+  },
+  
+  // Lesson Exercises
+  LESSON_EXERCISES: {
+    BASE: "/api/lessonexercises",
+    BY_ID: (id: number) => `/api/lessonexercises/${id}`,
+    BY_TOPIC: (topicId: number) => `/api/lessonexercises/topic/${topicId}`,
+    UNLOCK_STATUS: (id: number) => `/api/lessonexercises/${id}/unlock-status`,
+  },
+  
   // Words
   WORDS: {
     BASE: "/api/words",
@@ -67,6 +83,20 @@ export const API_ENDPOINTS = {
       return `/api/vocabularytopics/review/due?${params.toString()}`;
     },
     UPDATE_REVIEW: "/api/vocabularytopics/review",
+  },
+
+  // HSK Vocabulary
+  HSK_VOCABULARY: {
+    BY_HSK_AND_PART: (hskLevel: number, partNumber: number) => 
+      `/api/hsk-vocabulary/hsk/${hskLevel}/part/${partNumber}`,
+    BY_CHARACTER: (character: string) => 
+      `/api/hsk-vocabulary/word/${encodeURIComponent(character)}`,
+    BATCH: "/api/hsk-vocabulary/words/batch",
+  },
+
+  // AI
+  AI: {
+    GENERATE_EXAMPLE: "/api/ai/generate-example",
   },
 };
 

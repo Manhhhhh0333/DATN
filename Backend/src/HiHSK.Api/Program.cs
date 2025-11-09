@@ -15,7 +15,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Convert PascalCase to camelCase for JSON serialization
+        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.JsonSerializerOptions.DictionaryKeyPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+    });
 builder.Services.AddEndpointsApiExplorer();
 
 // Configure Swagger with JWT support
@@ -120,6 +126,8 @@ builder.Services.AddScoped<JwtTokenService>();
 // Register Repositories
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
 builder.Services.AddScoped<ILessonRepository, LessonRepository>();
+builder.Services.AddScoped<ILessonTopicRepository, LessonTopicRepository>();
+builder.Services.AddScoped<ILessonExerciseRepository, LessonExerciseRepository>();
 builder.Services.AddScoped<IQuestionRepository, QuestionRepository>();
 builder.Services.AddScoped<IUserProgressRepository, UserProgressRepository>();
 builder.Services.AddScoped<IVocabularyRepository, VocabularyRepository>();
@@ -128,9 +136,15 @@ builder.Services.AddScoped<IUserWordProgressRepository, UserWordProgressReposito
 // Register Services
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<ILessonService, LessonService>();
+builder.Services.AddScoped<ILessonTopicService, LessonTopicService>();
+builder.Services.AddScoped<ILessonExerciseService, LessonExerciseService>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IVocabularyService, VocabularyService>();
 builder.Services.AddScoped<ISRSService, SRSService>();
+
+// Register AI Services
+builder.Services.AddHttpClient<GeminiService>();
+builder.Services.AddScoped<GeminiService>();
 
 // Configure CORS
 var corsSettings = builder.Configuration.GetSection("CorsSettings");

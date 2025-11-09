@@ -149,6 +149,15 @@ export interface Word {
   exampleSentence?: string;
 }
 
+export interface WordExampleDto {
+  id: number;
+  character: string;
+  pinyin: string;
+  meaning: string;
+  audioUrl?: string;
+  sortOrder: number;
+}
+
 export interface WordDto {
   id: number;
   character: string;
@@ -158,6 +167,7 @@ export interface WordDto {
   exampleSentence?: string;
   hskLevel?: number;
   strokeCount?: number;
+  examples?: WordExampleDto[];
 }
 
 // Question types
@@ -287,5 +297,63 @@ export interface ReviewStatsDto {
   learningWords: number;
   masteredWords: number;
   wordsDueToday: number;
+}
+
+// Lesson Topic types
+export interface LessonTopicDto {
+  id: number;
+  courseId?: number;
+  hskLevel?: number;
+  title: string;
+  description?: string;
+  imageUrl?: string;
+  topicIndex: number;
+  isLocked: boolean;
+  prerequisiteTopicId?: number;
+  totalExercises: number;
+  totalWords: number;
+  progressPercentage: number;
+}
+
+export interface LessonTopicListDto {
+  id: number;
+  hskLevel?: number;
+  title: string;
+  description?: string;
+  imageUrl?: string;
+  topicIndex: number;
+  isLocked: boolean;
+  totalExercises: number;
+  totalWords: number;
+  progressPercentage: number;
+}
+
+// Lesson Exercise types
+export interface LessonExerciseDto {
+  id: number;
+  topicId: number;
+  exerciseType: string;
+  title: string;
+  description?: string;
+  exerciseIndex: number;
+  isLocked: boolean;
+  prerequisiteExerciseId?: number;
+  questions?: QuestionDto[];
+  dialogues?: DialogueDto[];
+  readingPassages?: ReadingPassageDto[];
+  sentencePatterns?: SentencePatternDto[];
+  words?: WordDto[];
+}
+
+export interface LessonExerciseListDto {
+  id: number;
+  topicId: number;
+  exerciseType: string;
+  title: string;
+  description?: string;
+  exerciseIndex: number;
+  isLocked: boolean;
+  isCompleted: boolean;
+  exerciseTypeName: string;
 }
 

@@ -54,16 +54,32 @@ public class LessonsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<LessonDto>> GetLesson(int id)
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var lesson = await _lessonService.GetLessonByIdAsync(id, userId!);
-        
-        if (lesson == null)
-            return NotFound(new { message = "Bài học không tồn tại" });
+        try
+        {
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new { message = "User not authenticated" });
+            }
 
-        if (lesson.IsLocked)
-            return Forbid("Bạn chưa hoàn thành bài học trước đó");
+            var lesson = await _lessonService.GetLessonByIdAsync(id, userId);
+            
+            if (lesson == null)
+                return NotFound(new { message = "Bài học không tồn tại" });
 
-        return Ok(lesson);
+            if (lesson.IsLocked)
+                return Forbid("Bạn chưa hoàn thành bài học trước đó");
+
+            return Ok(lesson);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StatusCode(500, new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = "Lỗi khi lấy thông tin bài học", error = ex.Message });
+        }
     }
 
     /// <summary>

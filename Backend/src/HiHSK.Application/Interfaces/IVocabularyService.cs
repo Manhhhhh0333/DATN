@@ -9,5 +9,8 @@ public interface IVocabularyService
     Task<List<FlashcardReviewDto>> GetWordsForReviewAsync(int topicId, string userId, bool onlyDue = true, int? limit = null);
     Task<ReviewStatsDto> GetTopicStatsAsync(int topicId, string userId);
     Task<ReviewStatsDto> GetOverallStatsAsync(string userId);
+    Task<List<WordWithProgressDto>> GetWordsByHSKLevelAndPartAsync(int hskLevel, int partNumber, string? userId = null);
+    Task<WordWithProgressDto> GetOrCreateWordByCharacterAsync(string character, string? userId = null);
+    Task<Dictionary<string, WordWithProgressDto>> GetOrCreateWordsBatchAsync(List<string> characters, string? userId = null);
 }
 

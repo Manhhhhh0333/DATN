@@ -1,3 +1,4 @@
+using HiHSK.Application.DTOs;
 using HiHSK.Application.Interfaces;
 using HiHSK.Domain.Entities;
 using HiHSK.Infrastructure.Data;
@@ -30,18 +31,72 @@ public class VocabularyRepository : IVocabularyRepository
 
     public async Task<VocabularyTopic?> GetTopicWithWordsAsync(int topicId)
     {
-        return await _context.VocabularyTopics
+        // Load Words mà không load navigation property Topic để tránh lỗi nếu cột TopicId chưa tồn tại
+        var topic = await _context.VocabularyTopics
             .Include(t => t.WordVocabularyTopics)
-                .ThenInclude(wvt => wvt.Word)
             .FirstOrDefaultAsync(t => t.Id == topicId);
+        
+        if (topic != null)
+        {
+            // Load Words riêng để tránh load navigation property Topic
+            var wordIds = topic.WordVocabularyTopics.Select(wvt => wvt.WordId).ToList();
+            var words = await _context.Words
+                .Where(w => wordIds.Contains(w.Id))
+                .AsNoTracking()
+                .Select(w => new Word
+                {
+                    Id = w.Id,
+                    Character = w.Character,
+                    Pinyin = w.Pinyin,
+                    Meaning = w.Meaning,
+                    AudioUrl = w.AudioUrl,
+                    ExampleSentence = w.ExampleSentence,
+                    HSKLevel = w.HSKLevel,
+                    StrokeCount = w.StrokeCount,
+                    Frequency = w.Frequency,
+                    CreatedAt = w.CreatedAt,
+                    // Không select LessonId và TopicId
+                    LessonId = null,
+                    TopicId = null
+                })
+                .OrderBy(w => w.Id) // Sắp xếp theo ID
+                .ToListAsync();
+            
+            // Gán Words vào WordVocabularyTopics
+            foreach (var wvt in topic.WordVocabularyTopics)
+            {
+                wvt.Word = words.FirstOrDefault(w => w.Id == wvt.WordId);
+            }
+        }
+        
+        return topic;
     }
 
     public async Task<List<Word>> GetWordsByTopicIdAsync(int topicId)
     {
-        return await _context.WordVocabularyTopics
+        // Load Words mà không load navigation property Topic
+        var wordIds = await _context.WordVocabularyTopics
             .Where(wvt => wvt.VocabularyTopicId == topicId)
-            .Include(wvt => wvt.Word)
-            .Select(wvt => wvt.Word)
+            .Select(wvt => wvt.WordId)
+            .ToListAsync();
+        
+        return await _context.Words
+            .Where(w => wordIds.Contains(w.Id))
+            .AsNoTracking()
+            .Select(w => new Word
+            {
+                Id = w.Id,
+                Character = w.Character,
+                Pinyin = w.Pinyin,
+                Meaning = w.Meaning,
+                AudioUrl = w.AudioUrl,
+                ExampleSentence = w.ExampleSentence,
+                HSKLevel = w.HSKLevel,
+                StrokeCount = w.StrokeCount,
+                LessonId = w.LessonId,
+                Frequency = w.Frequency,
+                CreatedAt = w.CreatedAt
+            })
             .OrderBy(w => w.Character)
             .ToListAsync();
     }
@@ -50,6 +105,245 @@ public class VocabularyRepository : IVocabularyRepository
     {
         return await _context.WordVocabularyTopics
             .CountAsync(wvt => wvt.VocabularyTopicId == topicId);
+    }
+
+    public async Task<List<Word>> GetWordsByHSKLevelAsync(int hskLevel)
+    {
+        // Load words với AsNoTracking, chỉ load các fields cần thiết
+        // Sắp xếp theo ID để đảm bảo thứ tự nhất quán
+        try
+        {
+            // Sử dụng LINQ thay vì FromSqlRaw để tránh lỗi nếu schema thay đổi
+            var words = await _context.Words
+                .Where(w => w.HSKLevel == hskLevel)
+                .OrderBy(w => w.Id)
+                .Take(150) // Chỉ lấy 150 từ đầu tiên
+                .AsNoTracking()
+                .Select(w => new Word
+                {
+                    Id = w.Id,
+                    Character = w.Character,
+                    Pinyin = w.Pinyin,
+                    Meaning = w.Meaning,
+                    AudioUrl = w.AudioUrl,
+                    ExampleSentence = w.ExampleSentence,
+                    HSKLevel = w.HSKLevel,
+                    StrokeCount = w.StrokeCount,
+                    Frequency = w.Frequency,
+                    CreatedAt = w.CreatedAt,
+                    LessonId = w.LessonId
+                })
+                .ToListAsync();
+
+            // Load WordExamples riêng nếu bảng tồn tại
+            var wordIds = words.Select(w => w.Id).ToList();
+            if (wordIds.Any())
+            {
+                try
+                {
+                    // Kiểm tra xem bảng WordExamples có tồn tại không
+                    var examples = await _context.WordExamples
+                        .Where(e => wordIds.Contains(e.WordId))
+                        .AsNoTracking()
+                        .OrderBy(e => e.WordId)
+                        .ThenBy(e => e.SortOrder)
+                        .ToListAsync();
+
+                    // Gán examples vào words
+                    foreach (var word in words)
+                    {
+                        word.WordExamples = examples
+                            .Where(e => e.WordId == word.Id)
+                            .OrderBy(e => e.SortOrder)
+                            .ToList();
+                    }
+                }
+                catch
+                {
+                    // Nếu bảng WordExamples chưa tồn tại, bỏ qua
+                    // Words vẫn được trả về nhưng không có examples
+                    foreach (var word in words)
+                    {
+                        word.WordExamples = new List<WordExample>();
+                    }
+                }
+            }
+            else
+            {
+                // Nếu không có words, trả về danh sách rỗng
+                foreach (var word in words)
+                {
+                    word.WordExamples = new List<WordExample>();
+                }
+            }
+
+            return words;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Lỗi khi load words: {ex.Message}", ex);
+        }
+    }
+
+    public async Task<Word?> GetWordByCharacterAsync(string character)
+    {
+        if (string.IsNullOrWhiteSpace(character))
+            return null;
+
+        try
+        {
+            // Tìm từ chính xác theo character
+            var word = await _context.Words
+                .Where(w => w.Character == character)
+                .AsNoTracking()
+                .Select(w => new Word
+                {
+                    Id = w.Id,
+                    Character = w.Character,
+                    Pinyin = w.Pinyin,
+                    Meaning = w.Meaning,
+                    AudioUrl = w.AudioUrl,
+                    ExampleSentence = w.ExampleSentence,
+                    HSKLevel = w.HSKLevel,
+                    StrokeCount = w.StrokeCount,
+                    Frequency = w.Frequency,
+                    CreatedAt = w.CreatedAt,
+                    LessonId = w.LessonId
+                })
+                .FirstOrDefaultAsync();
+
+            // Nếu không tìm thấy chính xác, tìm từ chứa character hoặc character chứa từ
+            if (word == null)
+            {
+                word = await _context.Words
+                    .Where(w => w.Character.Contains(character) || character.Contains(w.Character))
+                    .AsNoTracking()
+                    .Select(w => new Word
+                    {
+                        Id = w.Id,
+                        Character = w.Character,
+                        Pinyin = w.Pinyin,
+                        Meaning = w.Meaning,
+                        AudioUrl = w.AudioUrl,
+                        ExampleSentence = w.ExampleSentence,
+                        HSKLevel = w.HSKLevel,
+                        StrokeCount = w.StrokeCount,
+                        Frequency = w.Frequency,
+                        CreatedAt = w.CreatedAt,
+                        LessonId = w.LessonId
+                    })
+                    .FirstOrDefaultAsync();
+            }
+
+            // Load WordExamples nếu có
+            if (word != null)
+            {
+                try
+                {
+                    var examples = await _context.WordExamples
+                        .Where(e => e.WordId == word.Id)
+                        .AsNoTracking()
+                        .OrderBy(e => e.SortOrder)
+                        .ToListAsync();
+                    word.WordExamples = examples;
+                }
+                catch
+                {
+                    word.WordExamples = new List<WordExample>();
+                }
+            }
+
+            return word;
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Lỗi khi tìm từ theo character: {ex.Message}", ex);
+        }
+    }
+
+    public async Task<Word?> GetWordByIdAsync(int wordId)
+    {
+        try
+        {
+            var word = await _context.Words
+                .Include(w => w.WordExamples)
+                .FirstOrDefaultAsync(w => w.Id == wordId);
+            return word;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[VocabularyRepository] ❌ Lỗi khi lấy Word theo Id {wordId}: {ex.Message}");
+            throw new Exception($"Lỗi khi lấy Word theo Id: {ex.Message}", ex);
+        }
+    }
+
+    public async Task<Word> AddWordAsync(Word word)
+    {
+        try
+        {
+            Console.WriteLine($"[VocabularyRepository] Bắt đầu lưu từ mới: Character='{word.Character}', Pinyin='{word.Pinyin}', Meaning='{word.Meaning}'");
+
+            // Lưu Word (không lưu WordExamples ở đây)
+            _context.Words.Add(word);
+            await _context.SaveChangesAsync();
+            Console.WriteLine($"[VocabularyRepository] Đã lưu Word với Id={word.Id}");
+
+            return word;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[VocabularyRepository] ❌ Lỗi khi thêm từ mới: {ex.Message}");
+            Console.WriteLine($"[VocabularyRepository] StackTrace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"[VocabularyRepository] InnerException: {ex.InnerException.Message}");
+                Console.WriteLine($"[VocabularyRepository] InnerStackTrace: {ex.InnerException.StackTrace}");
+            }
+            throw new Exception($"Lỗi khi thêm từ mới: {ex.Message}", ex);
+        }
+    }
+
+    public async Task AddWordExamplesAsync(int wordId, List<WordExampleDto> examples)
+    {
+        try
+        {
+            if (examples == null || !examples.Any())
+            {
+                Console.WriteLine($"[VocabularyRepository] Không có WordExamples để lưu cho WordId={wordId}");
+                return;
+            }
+
+            Console.WriteLine($"[VocabularyRepository] Bắt đầu lưu {examples.Count} WordExamples cho WordId={wordId}");
+
+            foreach (var exampleDto in examples)
+            {
+                var example = new WordExample
+                {
+                    WordId = wordId,
+                    Character = exampleDto.Character ?? string.Empty,
+                    Pinyin = exampleDto.Pinyin ?? string.Empty,
+                    Meaning = exampleDto.Meaning ?? string.Empty,
+                    SortOrder = exampleDto.SortOrder > 0 ? exampleDto.SortOrder : examples.IndexOf(exampleDto) + 1
+                };
+
+                Console.WriteLine($"[VocabularyRepository] Lưu WordExample: Character='{example.Character}', Pinyin='{example.Pinyin}', Meaning='{example.Meaning}', SortOrder={example.SortOrder}");
+                _context.WordExamples.Add(example);
+            }
+
+            await _context.SaveChangesAsync();
+            Console.WriteLine($"[VocabularyRepository] Đã lưu {examples.Count} WordExamples thành công cho WordId={wordId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[VocabularyRepository] ❌ Lỗi khi thêm WordExamples cho WordId={wordId}: {ex.Message}");
+            Console.WriteLine($"[VocabularyRepository] StackTrace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"[VocabularyRepository] InnerException: {ex.InnerException.Message}");
+                Console.WriteLine($"[VocabularyRepository] InnerStackTrace: {ex.InnerException.StackTrace}");
+            }
+            throw new Exception($"Lỗi khi thêm WordExamples: {ex.Message}", ex);
+        }
     }
 }
 

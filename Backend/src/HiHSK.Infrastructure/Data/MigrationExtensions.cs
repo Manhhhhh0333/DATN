@@ -62,30 +62,41 @@ public static class MigrationExtensions
             ");
         }
 
-        // Seed Lessons
-        foreach (var lesson in seedData.Lessons)
+        // Seed Lessons (chỉ nếu có trong JSON)
+        if (seedData.Lessons != null && seedData.Lessons.Count > 0)
         {
-            migrationBuilder.Sql($@"
-                IF NOT EXISTS (SELECT 1 FROM Lessons WHERE LessonIndex = {lesson.LessonIndex} AND CourseId = {lesson.CourseId})
-                INSERT INTO Lessons (CourseId, Title, Description, LessonIndex, Content, IsLocked, PrerequisiteLessonId, IsActive, CreatedAt)
-                VALUES ({lesson.CourseId}, 
-                        N'{EscapeSql(lesson.Title ?? "")}', 
-                        N'{EscapeSql(lesson.Description ?? "")}', 
-                        {lesson.LessonIndex}, 
-                        N'{EscapeSql(lesson.Content ?? "")}', 
-                        {(lesson.IsLocked ? 1 : 0)}, 
-                        {(lesson.PrerequisiteLessonId.HasValue ? lesson.PrerequisiteLessonId.Value.ToString() : "NULL")}, 
-                        {(lesson.IsActive ? 1 : 0)}, 
-                        GETDATE())
-            ");
+            foreach (var lesson in seedData.Lessons)
+            {
+                migrationBuilder.Sql($@"
+                    IF NOT EXISTS (SELECT 1 FROM Lessons WHERE LessonIndex = {lesson.LessonIndex} AND CourseId = {lesson.CourseId})
+                    INSERT INTO Lessons (CourseId, Title, Description, LessonIndex, Content, IsLocked, PrerequisiteLessonId, IsActive, CreatedAt)
+                    VALUES ({lesson.CourseId}, 
+                            N'{EscapeSql(lesson.Title ?? "")}', 
+                            N'{EscapeSql(lesson.Description ?? "")}', 
+                            {lesson.LessonIndex}, 
+                            N'{EscapeSql(lesson.Content ?? "")}', 
+                            {(lesson.IsLocked ? 1 : 0)}, 
+                            {(lesson.PrerequisiteLessonId.HasValue ? lesson.PrerequisiteLessonId.Value.ToString() : "NULL")}, 
+                            {(lesson.IsActive ? 1 : 0)}, 
+                            GETDATE())
+                ");
+            }
         }
 
-        // Seed Words - Map lessonId từ lessonIndex
+        // Seed Words - Map lessonId từ lessonIndex (nếu có lessons) hoặc NULL nếu không có
         foreach (var word in seedData.Words)
         {
-            var lessonIdSql = word.LessonId.HasValue
-                ? $"(SELECT Id FROM Lessons WHERE LessonIndex = {word.LessonId.Value} AND CourseId = 1)"
-                : "NULL";
+            string lessonIdSql;
+            if (word.LessonId.HasValue && seedData.Lessons != null && seedData.Lessons.Count > 0)
+            {
+                // Có lessonId và có lessons trong JSON - map từ lessonIndex
+                lessonIdSql = $"(SELECT Id FROM Lessons WHERE LessonIndex = {word.LessonId.Value} AND CourseId = 1)";
+            }
+            else
+            {
+                // Không có lessonId hoặc không có lessons - set NULL
+                lessonIdSql = "NULL";
+            }
 
             migrationBuilder.Sql($@"
                 IF NOT EXISTS (SELECT 1 FROM Words WHERE Character = N'{EscapeSql(word.Character ?? "")}' AND Pinyin = N'{EscapeSql(word.Pinyin ?? "")}')

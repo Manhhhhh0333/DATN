@@ -12,6 +12,9 @@ import {
 } from "@/types";
 import Flashcard from "@/components/vocabulary/Flashcard";
 import VocabularyWordCard from "@/components/vocabulary/VocabularyWordCard";
+import VocabularyDetailView from "@/components/vocabulary/VocabularyDetailView";
+import VocabularyWordItem from "@/components/vocabulary/VocabularyWordItem";
+import { WordWithProgressDto } from "@/types";
 
 export default function VocabularyTopicDetailPage() {
   const params = useParams();
@@ -23,9 +26,11 @@ export default function VocabularyTopicDetailPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [stats, setStats] = useState<ReviewStatsDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState<"list" | "flashcard">("list");
+  const [mode, setMode] = useState<"list" | "flashcard" | "detail">("list");
+  const [selectedWord, setSelectedWord] = useState<WordWithProgressDto | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "new" | "learning" | "mastered">("all");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("list");
 
   useEffect(() => {
     if (topicId) {
@@ -191,194 +196,305 @@ export default function VocabularyTopicDetailPage() {
     );
   }
 
-  return (
-    <div className="min-h-screen flex flex-col">
-      <Header />
-      <main className="flex-grow container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <button
-            onClick={() => router.push("/vocabulary")}
-            className="text-blue-600 hover:text-blue-700 mb-4"
-          >
-            ← Quay lại danh sách chủ đề
-          </button>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{topic.name}</h1>
-          {topic.description && (
-            <p className="text-gray-600 mb-4">{topic.description}</p>
-          )}
-        </div>
+  if (mode === "detail" && selectedWord) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow container mx-auto px-4 py-8">
+          <div className="mb-6">
+            <button
+              onClick={() => {
+                setMode("list");
+                setSelectedWord(null);
+              }}
+              className="text-blue-600 hover:text-blue-700 mb-4 flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Quay lại danh sách
+            </button>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">{topic.name}</h1>
+          </div>
 
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-white rounded-lg p-4 shadow-sm">
-            <div className="text-sm text-gray-500 mb-1">Tổng số từ</div>
-            <div className="text-2xl font-bold text-gray-900">
-              {stats.totalWords}
-            </div>
+          <div className="h-[calc(100vh-250px)]">
+            <VocabularyDetailView
+              word={selectedWord}
+              onClose={() => {
+                setMode("list");
+                setSelectedWord(null);
+              }}
+            />
           </div>
-          <div className="bg-white rounded-lg p-4 shadow-sm">
-            <div className="text-sm text-gray-500 mb-1">Chưa học</div>
-            <div className="text-2xl font-bold text-blue-600">
-              {stats.newWords}
-            </div>
-          </div>
-          <div className="bg-white rounded-lg p-4 shadow-sm">
-            <div className="text-sm text-gray-500 mb-1">Đang học</div>
-            <div className="text-2xl font-bold text-yellow-600">
-              {stats.learningWords}
-            </div>
-          </div>
-          <div className="bg-white rounded-lg p-4 shadow-sm">
-            <div className="text-sm text-gray-500 mb-1">Đã thuộc</div>
-            <div className="text-2xl font-bold text-green-600">
-              {stats.masteredWords}
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="mb-6 flex gap-4">
-        <button
-          onClick={() => loadReviewWords(true)}
-          disabled={stats?.wordsDueToday === 0}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed font-medium"
-        >
-          Ôn tập từ cần ôn ({stats?.wordsDueToday || 0})
-        </button>
-        <button
-          onClick={() => loadReviewWords(false)}
-          className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-        >
-          Học tất cả từ ({topic.wordCount})
-        </button>
+        </main>
+        <Footer />
       </div>
+    );
+  }
 
-      {/* Search and Filter */}
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          {/* Search Input */}
-          <div className="flex-1">
-            <div className="relative">
+  // Calculate overall progress
+  const overallProgress = stats
+    ? Math.round(
+        ((stats.masteredWords + stats.learningWords) / stats.totalWords) * 100
+      )
+    : 0;
+
+  const completedCount = stats ? stats.masteredWords + stats.learningWords : 0;
+  const inProgressCount = stats ? stats.learningWords : 0;
+  const notStartedCount = stats ? stats.newWords : 0;
+
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <Header />
+      <main className="flex-grow container mx-auto px-4 py-6">
+        {/* Header Section */}
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Từ Vựng Tiếng Trung</h1>
+          <div className="flex items-center gap-4 mb-4">
+            <span className="text-lg text-gray-600">{overallProgress}% Hoàn thành</span>
+          </div>
+        </div>
+
+        {/* Progress Statistics */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Thống kê tiến độ</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <div className="text-sm text-gray-600 mb-1">Đã làm</div>
+              <div className="text-2xl font-bold text-green-600">
+                {completedCount}/{stats?.totalWords || 0}
+              </div>
+              <div className="text-xs text-gray-500">
+                {stats?.totalWords ? Math.round((completedCount / stats.totalWords) * 100) : 0}%
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600 mb-1">Đang làm</div>
+              <div className="text-2xl font-bold text-yellow-600">
+                {inProgressCount}/{stats?.totalWords || 0}
+              </div>
+              <div className="text-xs text-gray-500">
+                {stats?.totalWords ? Math.round((inProgressCount / stats.totalWords) * 100) : 0}%
+              </div>
+            </div>
+            <div>
+              <div className="text-sm text-gray-600 mb-1">Chưa làm</div>
+              <div className="text-2xl font-bold text-blue-600">
+                {notStartedCount}/{stats?.totalWords || 0}
+              </div>
+              <div className="text-xs text-gray-500">
+                {stats?.totalWords ? Math.round((notStartedCount / stats.totalWords) * 100) : 0}%
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Test Buttons */}
+        <div className="flex flex-wrap gap-2 mb-6">
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+            KIỂM TRA NGHĨA TỪ
+          </button>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+            KIỂM TRA TỪ
+          </button>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+            KIỂM TRA PINYIN
+          </button>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+            KIỂM TRA PHÁT ÂM
+          </button>
+        </div>
+
+        {/* Search Bar */}
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+          <div className="flex gap-4">
+            <div className="flex-1">
               <input
                 type="text"
-                placeholder="Tìm kiếm từ vựng (chữ Hán, pinyin, nghĩa)..."
+                placeholder="Tìm kiếm từ vựng..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
               />
-              <svg
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
             </div>
-          </div>
-
-          {/* Filter Buttons */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setFilterStatus("all")}
-              className={`px-4 py-3 rounded-lg font-medium transition-colors ${
-                filterStatus === "all"
-                  ? "bg-primary text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Tất cả
-            </button>
-            <button
-              onClick={() => setFilterStatus("new")}
-              className={`px-4 py-3 rounded-lg font-medium transition-colors ${
-                filterStatus === "new"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Chưa học
-            </button>
-            <button
-              onClick={() => setFilterStatus("learning")}
-              className={`px-4 py-3 rounded-lg font-medium transition-colors ${
-                filterStatus === "learning"
-                  ? "bg-yellow-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Đang học
-            </button>
-            <button
-              onClick={() => setFilterStatus("mastered")}
-              className={`px-4 py-3 rounded-lg font-medium transition-colors ${
-                filterStatus === "mastered"
-                  ? "bg-green-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Đã thuộc
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setFilterStatus("all")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterStatus === "all"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Tất cả
+              </button>
+              <button
+                onClick={() => setFilterStatus("new")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterStatus === "new"
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Chưa học
+              </button>
+              <button
+                onClick={() => setFilterStatus("learning")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterStatus === "learning"
+                    ? "bg-yellow-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Đang học
+              </button>
+              <button
+                onClick={() => setFilterStatus("mastered")}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  filterStatus === "mastered"
+                    ? "bg-green-600 text-white"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                }`}
+              >
+                Đã thuộc
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Words List */}
-      <div className="bg-white rounded-lg shadow-sm">
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">
-              Danh sách từ vựng
-            </h2>
-            <span className="text-gray-600">
-              {(() => {
-                const filtered = getFilteredWords();
-                return `${filtered.length} / ${topic.words.length} từ`;
-              })()}
-            </span>
-          </div>
-
-          {topic.words.length === 0 ? (
-            <div className="text-center py-12">
-              <svg
-                className="w-16 h-16 mx-auto mb-4 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                />
-              </svg>
-              <p className="text-gray-500 text-lg">Chưa có từ vựng nào trong chủ đề này.</p>
-            </div>
-          ) : getFilteredWords().length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-500 text-lg">Không tìm thấy từ vựng nào phù hợp với bộ lọc.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {getFilteredWords().map((word, index) => (
-                <div
-                  key={word.id}
-                  className="animate-fade-in"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  <VocabularyWordCard word={word} />
+        {/* Main Content - 2 Columns Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - Words List */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">Danh sách từ vựng</h2>
+                <div className="flex items-center gap-4">
+                  <span className="text-gray-600 text-sm">
+                    {getFilteredWords().length} từ
+                  </span>
+                  <div className="flex gap-2 border border-gray-300 rounded-lg p-1">
+                    <button
+                      onClick={() => setViewMode("list")}
+                      className={`px-3 py-1 rounded text-sm transition-colors ${
+                        viewMode === "list"
+                          ? "bg-blue-600 text-white"
+                          : "text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      Danh sách
+                    </button>
+                    <button
+                      onClick={() => setViewMode("grid")}
+                      className={`px-3 py-1 rounded text-sm transition-colors ${
+                        viewMode === "grid"
+                          ? "bg-blue-600 text-white"
+                          : "text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      Lưới
+                    </button>
+                  </div>
                 </div>
-              ))}
+              </div>
+
+              {topic.words.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">Chưa có từ vựng nào trong chủ đề này.</p>
+                </div>
+              ) : getFilteredWords().length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-500">Không tìm thấy từ vựng nào phù hợp với bộ lọc.</p>
+                </div>
+              ) : viewMode === "list" ? (
+                <div>
+                  {getFilteredWords().map((word) => (
+                    <VocabularyWordItem
+                      key={word.id}
+                      word={word}
+                      onDetailClick={(w) => {
+                        setSelectedWord(w);
+                        setMode("detail");
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {getFilteredWords().map((word, index) => (
+                    <div
+                      key={word.id}
+                      className="animate-fade-in cursor-pointer"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                      onClick={() => {
+                        setSelectedWord(word);
+                        setMode("detail");
+                      }}
+                    >
+                      <VocabularyWordCard word={word} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Right Sidebar - Lessons and Activities */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-sm p-6 sticky top-4">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Hán Ngữ</h3>
+              <div className="text-sm text-gray-600 mb-6">
+                0/{topic.wordCount || 0} bài hoàn thành
+              </div>
+
+              {/* Lesson List - Placeholder */}
+              <div className="space-y-3 mb-6">
+                <div className="border-b border-gray-200 pb-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-gray-900">你好</span>
+                    <span className="text-xs text-gray-500">0%</span>
+                  </div>
+                  <div className="text-xs text-gray-600 mb-2">Xin chào</div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div className="bg-blue-600 h-1.5 rounded-full" style={{ width: "0%" }}></div>
+                  </div>
+                </div>
+                {/* Add more lessons here */}
+              </div>
+
+              {/* Learning Activities */}
+              <div>
+                <h4 className="font-semibold text-gray-900 mb-3">Hoạt động học tập</h4>
+                <div className="space-y-2">
+                  {[
+                    "Từ vựng",
+                    "Nhớ nhanh từ",
+                    "Chọn đúng sai",
+                    "Chọn đúng sai với câu",
+                    "Nghe câu chọn hình ảnh",
+                    "Ghép câu",
+                    "Điền từ",
+                    "Flash card từ vựng",
+                    "Hội thoại",
+                    "Đọc hiểu",
+                    "Ngữ pháp",
+                    "Sắp xếp câu",
+                    "Bài tập luyện dịch",
+                    "Kiểm tra tổng hợp",
+                  ].map((activity, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 transition-colors cursor-pointer"
+                    >
+                      <div className="w-4 h-4 rounded border-2 border-gray-300 flex-shrink-0"></div>
+                      <span className="text-sm text-gray-700">{activity}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
       </main>
       <Footer />
     </div>

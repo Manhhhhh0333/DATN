@@ -53,6 +53,12 @@ public class LessonService : ILessonService
         if (lesson == null)
             return null;
 
+        // Kiểm tra Course có tồn tại không
+        if (lesson.Course == null)
+        {
+            throw new InvalidOperationException($"Lesson {id} không có Course liên kết. Vui lòng kiểm tra CourseId trong database.");
+        }
+
         var isCompleted = await _lessonRepository.IsLessonCompletedAsync(userId, lesson.Id);
         var isLocked = await CheckLessonUnlockStatusAsync(id, userId);
 
@@ -60,7 +66,7 @@ public class LessonService : ILessonService
         {
             Id = lesson.Id,
             CourseId = lesson.CourseId,
-            CourseTitle = lesson.Course.Title,
+            CourseTitle = lesson.Course?.Title ?? "N/A",
             Title = lesson.Title,
             Description = lesson.Description,
             LessonIndex = lesson.LessonIndex,
@@ -216,7 +222,25 @@ public class LessonService : ILessonService
             var isLocked = await CheckLessonUnlockStatusAsync(lesson.Id, userId);
 
             // Load lesson details để đếm Words và Questions
-            var lessonDetails = await _lessonRepository.GetLessonWithDetailsAsync(lesson.Id);
+            // Sử dụng try-catch để tránh lỗi nếu có vấn đề với database schema
+            int totalWords = 0;
+            int totalQuestions = 0;
+            try
+            {
+                var lessonDetails = await _lessonRepository.GetLessonWithDetailsAsync(lesson.Id);
+                totalWords = lessonDetails?.Words?.Count ?? 0;
+                // Chỉ đếm questions không thuộc ReadingPassage, Dialogue, SentencePattern
+                totalQuestions = lessonDetails?.Questions?.Count(q => 
+                    q.ReadingPassageId == null && 
+                    q.DialogueId == null && 
+                    q.SentencePatternId == null) ?? 0;
+            }
+            catch (Exception)
+            {
+                // Fallback: Đếm trực tiếp từ database
+                totalWords = await _lessonRepository.CountWordsByLessonIdAsync(lesson.Id);
+                totalQuestions = await _lessonRepository.CountQuestionsByLessonIdAsync(lesson.Id);
+            }
 
             result.Add(new LessonListDto
             {
@@ -228,8 +252,8 @@ public class LessonService : ILessonService
                 IsLocked = isLocked,
                 IsCompleted = isCompleted,
                 PrerequisiteLessonId = lesson.PrerequisiteLessonId,
-                TotalWords = lessonDetails?.Words.Count ?? 0,
-                TotalQuestions = lessonDetails?.Questions.Count ?? 0
+                TotalWords = totalWords,
+                TotalQuestions = totalQuestions
             });
         }
 

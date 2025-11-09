@@ -7,6 +7,7 @@ import {
   ReviewStatsDto,
   UpdateReviewStatusRequest,
   UserWordProgress,
+  WordWithProgressDto,
 } from "../../types";
 
 export const vocabularyService = {
@@ -86,6 +87,43 @@ export const vocabularyService = {
   ): Promise<FlashcardReviewDto[]> {
     const response = await apiClient.get<FlashcardReviewDto[]>(
       API_ENDPOINTS.VOCABULARY_TOPICS.REVIEW_DUE(topicId, limit)
+    );
+    return response.data;
+  },
+
+  /**
+   * Lấy từ vựng theo HSK level và phần
+   */
+  async getWordsByHSKLevelAndPart(
+    hskLevel: number,
+    partNumber: number
+  ): Promise<WordWithProgressDto[]> {
+    const response = await apiClient.get<WordWithProgressDto[]>(
+      API_ENDPOINTS.HSK_VOCABULARY.BY_HSK_AND_PART(hskLevel, partNumber)
+    );
+    return response.data;
+  },
+
+  /**
+   * Lấy hoặc tạo từ vựng theo character
+   * Nếu từ đã có trong database → trả về chi tiết từ đó
+   * Nếu chưa có → gọi API để tạo từ mới bằng AI
+   */
+  async getOrCreateWordByCharacter(character: string): Promise<WordWithProgressDto> {
+    const response = await apiClient.get<WordWithProgressDto>(
+      API_ENDPOINTS.HSK_VOCABULARY.BY_CHARACTER(character)
+    );
+    return response.data;
+  },
+
+  /**
+   * Lấy hoặc tạo nhiều từ vựng cùng lúc (batch)
+   * Tối ưu hơn khi cần lấy nhiều từ từ WordExamples
+   */
+  async getOrCreateWordsBatch(characters: string[]): Promise<Record<string, WordWithProgressDto>> {
+    const response = await apiClient.post<Record<string, WordWithProgressDto>>(
+      API_ENDPOINTS.HSK_VOCABULARY.BATCH,
+      { characters }
     );
     return response.data;
   },

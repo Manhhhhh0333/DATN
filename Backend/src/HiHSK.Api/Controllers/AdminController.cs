@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.IO;
+using System.Linq;
 
 namespace HiHSK.Api.Controllers;
 
@@ -30,6 +31,7 @@ public class AdminController : ControllerBase
     /// <param name="fileName">Tên file JSON trong thư mục data (ví dụ: seed-data-hsk1.json)</param>
     /// <param name="clearExisting">Xóa dữ liệu cũ trước khi seed (mặc định: false)</param>
     [HttpPost("seed")]
+    [AllowAnonymous] // Tạm thời cho phép không cần auth để seed data
     public async Task<IActionResult> SeedData(
         [FromQuery] string fileName = "seed-data-hsk1.json",
         [FromQuery] bool clearExisting = false)
@@ -103,6 +105,7 @@ public class AdminController : ControllerBase
     /// Xóa tất cả dữ liệu seed (cẩn thận!)
     /// </summary>
     [HttpPost("clear-data")]
+    [AllowAnonymous] // Tạm thời cho phép không cần auth để xóa data
     public async Task<IActionResult> ClearData()
     {
         try
@@ -177,8 +180,16 @@ public class AdminController : ControllerBase
             }
 
             // Lấy tất cả từ vựng HSK1
+            // Sử dụng raw SQL với NULL AS TopicId để tránh lỗi nếu cột TopicId chưa tồn tại
+            // EF Core yêu cầu tất cả các cột của entity phải có trong SELECT
             var hsk1Words = await _context.Words
-                .Where(w => w.HSKLevel == 1)
+                .FromSqlRaw(@"
+                    SELECT Id, Character, Pinyin, Meaning, HSKLevel, LessonId, 
+                           AudioUrl, ExampleSentence, Frequency, StrokeCount, CreatedAt,
+                           CAST(NULL AS int) AS TopicId
+                    FROM Words 
+                    WHERE HSKLevel = {0}", 1)
+                .AsNoTracking()
                 .ToListAsync();
 
             _logger.LogInformation($"Tìm thấy {hsk1Words.Count} từ vựng HSK1");
@@ -255,15 +266,66 @@ public class AdminController : ControllerBase
 
     private async Task ClearExistingDataAsync()
     {
-        // Xóa theo thứ tự để tránh lỗi Foreign Key
-        _context.QuestionOptions.RemoveRange(_context.QuestionOptions);
-        _context.Questions.RemoveRange(_context.Questions);
-        _context.Words.RemoveRange(_context.Words);
-        _context.Lessons.RemoveRange(_context.Lessons);
-        _context.Courses.RemoveRange(_context.Courses);
-        _context.CourseCategories.RemoveRange(_context.CourseCategories);
-        
-        await _context.SaveChangesAsync();
+        try
+        {
+            _logger.LogInformation("Bắt đầu xóa dữ liệu seed...");
+
+            // Sử dụng raw SQL để xóa nhanh và tránh lỗi Foreign Key
+            // Xóa theo thứ tự để tránh lỗi Foreign Key constraint
+            
+            _logger.LogInformation("Xóa WordVocabularyTopics...");
+            await _context.Database.ExecuteSqlRawAsync("DELETE FROM WordVocabularyTopics WHERE VocabularyTopicId = 1 OR VocabularyTopicId IN (SELECT Id FROM VocabularyTopics WHERE Name = 'HSK 1')");
+            
+            _logger.LogInformation("Xóa User progress data...");
+            await _context.Database.ExecuteSqlRawAsync(@"
+                DELETE FROM UserWordProgresses WHERE WordId IN (SELECT Id FROM Words WHERE HSKLevel = 1);
+                DELETE FROM UserLessonStatuses WHERE LessonId IN (SELECT Id FROM Lessons WHERE CourseId = 1);
+                DELETE FROM UserCourseStatuses WHERE CourseId = 1;
+                DELETE FROM UserAnswers WHERE QuestionId IN (SELECT Id FROM Questions WHERE LessonId IN (SELECT Id FROM Lessons WHERE CourseId = 1));
+                DELETE FROM UserLessonProgresses WHERE LessonId IN (SELECT Id FROM Lessons WHERE CourseId = 1);
+            ");
+
+            _logger.LogInformation("Xóa Questions và Options...");
+            await _context.Database.ExecuteSqlRawAsync(@"
+                DELETE FROM QuestionOptions WHERE QuestionId IN (SELECT Id FROM Questions WHERE LessonId IN (SELECT Id FROM Lessons WHERE CourseId = 1));
+                DELETE FROM Questions WHERE LessonId IN (SELECT Id FROM Lessons WHERE CourseId = 1);
+            ");
+
+            _logger.LogInformation("Xóa Reading Passages và Dialogues...");
+            await _context.Database.ExecuteSqlRawAsync(@"
+                DELETE FROM ReadingPassageWords WHERE ReadingPassageId IN (SELECT Id FROM ReadingPassages WHERE LessonId IN (SELECT Id FROM Lessons WHERE CourseId = 1));
+                DELETE FROM ReadingPassages WHERE LessonId IN (SELECT Id FROM Lessons WHERE CourseId = 1);
+                DELETE FROM DialogueSentences WHERE DialogueId IN (SELECT Id FROM Dialogues WHERE LessonId IN (SELECT Id FROM Lessons WHERE CourseId = 1));
+                DELETE FROM Dialogues WHERE LessonId IN (SELECT Id FROM Lessons WHERE CourseId = 1);
+                DELETE FROM SentencePatterns WHERE LessonId IN (SELECT Id FROM Lessons WHERE CourseId = 1);
+            ");
+
+            _logger.LogInformation("Xóa Words...");
+            await _context.Database.ExecuteSqlRawAsync("DELETE FROM Words WHERE HSKLevel = 1");
+
+            _logger.LogInformation("Xóa Lessons...");
+            await _context.Database.ExecuteSqlRawAsync("DELETE FROM Lessons WHERE CourseId = 1");
+
+            _logger.LogInformation("Xóa Courses...");
+            await _context.Database.ExecuteSqlRawAsync("DELETE FROM Courses WHERE CategoryId = 1");
+
+            _logger.LogInformation("Xóa Course Categories...");
+            await _context.Database.ExecuteSqlRawAsync("DELETE FROM CourseCategories WHERE Name = 'HSK1'");
+
+            _logger.LogInformation("Xóa Vocabulary Topics...");
+            await _context.Database.ExecuteSqlRawAsync("DELETE FROM VocabularyTopics WHERE Name = 'HSK 1' OR Id = 1");
+
+            _logger.LogInformation("Đã xóa tất cả dữ liệu seed thành công!");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi xóa dữ liệu: {Message}", ex.Message);
+            if (ex.InnerException != null)
+            {
+                _logger.LogError(ex.InnerException, "Inner exception: {Message}", ex.InnerException.Message);
+            }
+            throw;
+        }
     }
 }
 

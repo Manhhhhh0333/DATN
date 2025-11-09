@@ -27,5 +27,6 @@ public class Word
     public ICollection<ReadingPassageWord> ReadingPassageWords { get; set; } = new List<ReadingPassageWord>();
     public ICollection<UserReadingWordMark> UserReadingWordMarks { get; set; } = new List<UserReadingWordMark>();
     public ICollection<WritingExercise> WritingExercises { get; set; } = new List<WritingExercise>();
+    public ICollection<WordExample> WordExamples { get; set; } = new List<WordExample>();
 }
 

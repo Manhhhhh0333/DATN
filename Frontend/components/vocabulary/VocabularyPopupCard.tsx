@@ -54,11 +54,68 @@ export default function VocabularyPopupCard({
   const playAudio = async () => {
     try {
       setIsPlaying(true);
-      const audioUrl = word.audioUrl || getProxyAudioUrl(word.character);
+      
+      // Clean text để loại bỏ BOM
+      const cleanCharacter = word.character ? word.character.replace(/^\uFEFF/, "").trim() : "";
+      
+      // Ưu tiên sử dụng word.audioUrl, nhưng nếu là Google TTS URL thì convert sang proxy URL
+      let audioUrl = word.audioUrl;
+      
+      if (audioUrl) {
+        // Loại bỏ BOM từ URL string
+        audioUrl = audioUrl.replace(/%EF%BB%BF/gi, "");
+        
+        // Nếu là Google TTS URL, convert sang proxy URL
+        if (audioUrl.includes("translate.google.com/translate_tts")) {
+          try {
+            const url = new URL(audioUrl);
+            const q = url.searchParams.get("q");
+            const lang = url.searchParams.get("tl") || "zh-CN";
+            if (q) {
+              // Decode và clean text trong URL parameter
+              const decodedQ = decodeURIComponent(q);
+              const cleanedQ = decodedQ.replace(/^\uFEFF/, "").trim();
+              if (cleanedQ) {
+                // Convert sang proxy URL
+                audioUrl = getProxyAudioUrl(cleanedQ, lang);
+              } else {
+                // Nếu text sau khi clean rỗng, dùng cleanCharacter
+                audioUrl = getProxyAudioUrl(cleanCharacter);
+              }
+            } else {
+              // Nếu không có q parameter, dùng cleanCharacter
+              audioUrl = getProxyAudioUrl(cleanCharacter);
+            }
+          } catch (e) {
+            // Nếu không parse được URL, dùng cleanCharacter
+            console.warn("Không thể parse Google TTS URL, dùng character trực tiếp:", e);
+            audioUrl = getProxyAudioUrl(cleanCharacter);
+          }
+        }
+        // Nếu không phải Google TTS URL, giữ nguyên (có thể là URL khác hợp lệ)
+      } else {
+        // Nếu không có audioUrl, generate từ character
+        audioUrl = getProxyAudioUrl(cleanCharacter);
+      }
+      
+      // Kiểm tra audioUrl trước khi tạo Audio object
+      if (!audioUrl || audioUrl.trim() === '') {
+        console.warn("AudioUrl không hợp lệ:", audioUrl);
+        setIsPlaying(false);
+        return;
+      }
+      
       const audio = new Audio(audioUrl);
-      await audio.play();
+      
+      // Thêm error handler trước khi play
+      audio.onerror = (e) => {
+        console.error("Lỗi khi load audio:", e, "URL:", audioUrl);
+        setIsPlaying(false);
+      };
+      
       audio.onended = () => setIsPlaying(false);
-      audio.onerror = () => setIsPlaying(false);
+      
+      await audio.play();
     } catch (error) {
       console.error("Lỗi phát audio:", error);
       setIsPlaying(false);

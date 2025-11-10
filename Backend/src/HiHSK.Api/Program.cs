@@ -24,6 +24,9 @@ builder.Services.AddControllers()
     });
 builder.Services.AddEndpointsApiExplorer();
 
+// Add Memory Cache for TTS service
+builder.Services.AddMemoryCache();
+
 // Configure Swagger with JWT support
 builder.Services.AddSwaggerGen(c =>
 {
@@ -125,9 +128,6 @@ builder.Services.AddScoped<JwtTokenService>();
 
 // Register Repositories
 builder.Services.AddScoped<ICourseRepository, CourseRepository>();
-builder.Services.AddScoped<ILessonRepository, LessonRepository>();
-builder.Services.AddScoped<ILessonTopicRepository, LessonTopicRepository>();
-builder.Services.AddScoped<ILessonExerciseRepository, LessonExerciseRepository>();
 builder.Services.AddScoped<IQuestionRepository, QuestionRepository>();
 builder.Services.AddScoped<IUserProgressRepository, UserProgressRepository>();
 builder.Services.AddScoped<IVocabularyRepository, VocabularyRepository>();
@@ -135,16 +135,16 @@ builder.Services.AddScoped<IUserWordProgressRepository, UserWordProgressReposito
 
 // Register Services
 builder.Services.AddScoped<ICourseService, CourseService>();
-builder.Services.AddScoped<ILessonService, LessonService>();
-builder.Services.AddScoped<ILessonTopicService, LessonTopicService>();
-builder.Services.AddScoped<ILessonExerciseService, LessonExerciseService>();
-builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IVocabularyService, VocabularyService>();
 builder.Services.AddScoped<ISRSService, SRSService>();
 
 // Register AI Services
 builder.Services.AddHttpClient<GeminiService>();
 builder.Services.AddScoped<GeminiService>();
+
+// Register TTS Service
+builder.Services.AddHttpClient<TTSService>();
+builder.Services.AddScoped<TTSService>();
 
 // Configure CORS
 var corsSettings = builder.Configuration.GetSection("CorsSettings");

@@ -2,7 +2,24 @@
  * Utility functions for audio playback
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5075";
+
+/**
+ * Loại bỏ BOM (Byte Order Mark) và các ký tự không hợp lệ khỏi text
+ * @param text Text cần clean
+ * @returns Text đã được clean
+ */
+function cleanText(text: string): string {
+  if (!text) return "";
+  
+  // Loại bỏ BOM (UTF-8 BOM: \uFEFF hoặc \xEF\xBB\xBF)
+  let cleaned = text.replace(/^\uFEFF/, "").replace(/^\xEF\xBB\xBF/, "");
+  
+  // Loại bỏ các ký tự whitespace ở đầu và cuối
+  cleaned = cleaned.trim();
+  
+  return cleaned;
+}
 
 /**
  * Tạo proxy audio URL từ backend để tránh lỗi CORS
@@ -13,28 +30,36 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 export function getProxyAudioUrl(text: string, lang: string = "zh-CN"): string {
   if (!text) return "";
   
+  // Clean text trước khi xử lý
+  const cleanedText = cleanText(text);
+  if (!cleanedText) return "";
+  
   // Nếu đã là proxy URL hoặc URL hợp lệ khác, trả về nguyên
-  if (text.startsWith("http://") || text.startsWith("https://")) {
+  if (cleanedText.startsWith("http://") || cleanedText.startsWith("https://")) {
     // Kiểm tra xem có phải Google TTS URL không
-    if (text.includes("translate.google.com/translate_tts")) {
+    if (cleanedText.includes("translate.google.com/translate_tts")) {
       // Extract text từ Google TTS URL và tạo proxy URL
       try {
-        const url = new URL(text);
+        const url = new URL(cleanedText);
         const q = url.searchParams.get("q");
         if (q) {
-          return `${API_BASE_URL}/api/audio/proxy?text=${encodeURIComponent(q)}&lang=${lang}`;
+          // Clean text từ URL parameter
+          const cleanedQ = cleanText(q);
+          if (cleanedQ) {
+            return `${API_BASE_URL}/api/audio/proxy?text=${encodeURIComponent(cleanedQ)}&lang=${lang}`;
+          }
         }
       } catch (e) {
         // Nếu không parse được, tạo proxy URL từ text gốc
       }
     } else {
       // Nếu là URL khác (không phải Google TTS), trả về nguyên
-      return text;
+      return cleanedText;
     }
   }
   
-  // Tạo proxy URL từ text
-  return `${API_BASE_URL}/api/audio/proxy?text=${encodeURIComponent(text)}&lang=${lang}`;
+  // Tạo proxy URL từ text đã clean
+  return `${API_BASE_URL}/api/audio/proxy?text=${encodeURIComponent(cleanedText)}&lang=${lang}`;
 }
 
 /**

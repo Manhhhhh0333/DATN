@@ -327,5 +327,71 @@ public class AdminController : ControllerBase
             throw;
         }
     }
+
+    /// <summary>
+    /// Cập nhật tất cả ExampleSentence thành NULL (rỗng) trong bảng Words
+    /// </summary>
+    [HttpPost("clear-example-sentences")]
+    [AllowAnonymous] // Tạm thời cho phép không cần auth
+    public async Task<IActionResult> ClearExampleSentences()
+    {
+        try
+        {
+            _logger.LogInformation("Bắt đầu cập nhật ExampleSentence thành NULL...");
+
+            // Đếm số lượng bản ghi trước khi update
+            var countBefore = await _context.Words
+                .Where(w => w.ExampleSentence != null && w.ExampleSentence != "")
+                .CountAsync();
+
+            _logger.LogInformation($"Số lượng bản ghi có ExampleSentence trước khi update: {countBefore}");
+
+            // Cập nhật tất cả ExampleSentence thành NULL
+            var updatedCount = await _context.Database.ExecuteSqlRawAsync(@"
+                UPDATE Words
+                SET ExampleSentence = NULL
+                WHERE ExampleSentence IS NOT NULL AND ExampleSentence != ''
+            ");
+
+            // Đếm số lượng bản ghi sau khi update
+            var countAfter = await _context.Words
+                .Where(w => w.ExampleSentence != null && w.ExampleSentence != "")
+                .CountAsync();
+
+            // Lấy thống kê
+            var totalWords = await _context.Words.CountAsync();
+            var wordsWithEmptyExample = await _context.Words
+                .Where(w => w.ExampleSentence == null || w.ExampleSentence == "")
+                .CountAsync();
+            var wordsWithExample = await _context.Words
+                .Where(w => w.ExampleSentence != null && w.ExampleSentence != "")
+                .CountAsync();
+
+            _logger.LogInformation($"Cập nhật thành công! Đã cập nhật {updatedCount} bản ghi.");
+
+            return Ok(new
+            {
+                message = "Cập nhật ExampleSentence thành công!",
+                updatedCount = updatedCount,
+                countBefore = countBefore,
+                countAfter = countAfter,
+                stats = new
+                {
+                    totalWords = totalWords,
+                    wordsWithEmptyExample = wordsWithEmptyExample,
+                    wordsWithExample = wordsWithExample
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi cập nhật ExampleSentence");
+            return StatusCode(500, new
+            {
+                message = "Lỗi khi cập nhật ExampleSentence",
+                error = ex.Message
+            });
+        }
+    }
 }
 

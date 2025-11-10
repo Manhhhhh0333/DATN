@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { WordWithProgressDto, WordExampleDto } from "@/types";
 import { getProxyAudioUrl } from "@/lib/audio";
 import { aiService } from "@/lib/services/aiService";
@@ -24,15 +24,76 @@ export default function VocabularyWordItem({ word, onDetailClick, viewMode = "li
   const [popupWord, setPopupWord] = useState<WordWithProgressDto | null>(null);
   const [popupPosition, setPopupPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
-  const playAudio = async (text?: string) => {
+  const playAudio = async (text?: string, audioUrlOverride?: string | null) => {
     try {
       setIsPlaying(true);
       const audioText = text || word.character;
-      const audioUrl = word.audioUrl || getProxyAudioUrl(audioText);
+      
+      // Clean text để loại bỏ BOM và các ký tự không hợp lệ
+      const cleanAudioText = audioText ? audioText.replace(/^\uFEFF/, "").trim() : "";
+      
+      // Nếu text khác với word.character, đây là example sentence - không dùng word.audioUrl
+      const isExampleSentence = text && text !== word.character;
+      
+      // Ưu tiên sử dụng audioUrlOverride (từ example), sau đó word.audioUrl (chỉ khi không phải example sentence)
+      let audioUrl = audioUrlOverride || (!isExampleSentence ? word.audioUrl : null);
+      
+      // Nếu có audioUrl và là Google TTS URL, convert sang proxy URL
+      if (audioUrl) {
+        // Loại bỏ BOM từ URL string (dưới dạng %EF%BB%BF)
+        audioUrl = audioUrl.replace(/%EF%BB%BF/gi, "");
+        
+        // Nếu là Google TTS URL, convert sang proxy URL
+        if (audioUrl.includes("translate.google.com/translate_tts")) {
+          try {
+            const url = new URL(audioUrl);
+            const q = url.searchParams.get("q");
+            const lang = url.searchParams.get("tl") || "zh-CN";
+            if (q) {
+              // Decode và clean text trong URL parameter
+              const decodedQ = decodeURIComponent(q);
+              const cleanedQ = decodedQ.replace(/^\uFEFF/, "").trim();
+              if (cleanedQ) {
+                // Convert sang proxy URL
+                audioUrl = getProxyAudioUrl(cleanedQ, lang);
+              } else {
+                // Nếu text sau khi clean rỗng, dùng cleanAudioText
+                audioUrl = getProxyAudioUrl(cleanAudioText);
+              }
+            } else {
+              // Nếu không có q parameter, dùng cleanAudioText
+              audioUrl = getProxyAudioUrl(cleanAudioText);
+            }
+          } catch (e) {
+            // Nếu không parse được URL, dùng cleanAudioText
+            console.warn("Không thể parse Google TTS URL, dùng text trực tiếp:", e);
+            audioUrl = getProxyAudioUrl(cleanAudioText);
+          }
+        }
+        // Nếu không phải Google TTS URL, giữ nguyên (có thể là URL khác hợp lệ)
+      } else {
+        // Nếu không có audioUrl, generate từ text (luôn dùng proxy URL)
+        audioUrl = getProxyAudioUrl(cleanAudioText);
+      }
+      
+      // Kiểm tra audioUrl trước khi tạo Audio object
+      if (!audioUrl || audioUrl.trim() === '') {
+        console.warn("AudioUrl không hợp lệ:", audioUrl);
+        setIsPlaying(false);
+        return;
+      }
+      
       const audio = new Audio(audioUrl);
-      await audio.play();
+      
+      // Thêm error handler trước khi play
+      audio.onerror = (e) => {
+        console.error("Lỗi khi load audio:", e, "URL:", audioUrl);
+        setIsPlaying(false);
+      };
+      
       audio.onended = () => setIsPlaying(false);
-      audio.onerror = () => setIsPlaying(false);
+      
+      await audio.play();
     } catch (error) {
       console.error("Lỗi phát audio:", error);
       setIsPlaying(false);
@@ -118,21 +179,31 @@ export default function VocabularyWordItem({ word, onDetailClick, viewMode = "li
   const examples = getExamples();
   const hasExamples = examples.length > 0;
 
+  // Track các từ đã pre-load để tránh pre-load nhiều lần
+  const preloadedWordsRef = useRef<Set<string>>(new Set());
+  
   // Pre-load các từ vựng từ WordExamples vào cache khi component mount
   useEffect(() => {
     if (examples.length > 0) {
       // Extract các từ vựng từ examples
       const wordsToLoad = extractWordsFromExamples(examples);
       
-      // Lọc ra các từ chưa có trong cache và chưa có trong allWords
+      // Lọc ra các từ chưa có trong cache, chưa có trong allWords, và chưa được pre-load
       const missingWords = wordsToLoad.filter(char => {
         const cleanChar = char.trim().replace(/[\s，。、！？：；,\.!?:;]+/g, "");
         return !wordCache.has(cleanChar) && 
-               !allWords?.some(w => w.character === cleanChar);
+               !allWords?.some(w => w.character === cleanChar) &&
+               !preloadedWordsRef.current.has(cleanChar);
       });
 
       // Nếu có từ chưa load, gọi batch API
       if (missingWords.length > 0 && missingWords.length <= 50) {
+        // Đánh dấu các từ này đang được pre-load
+        missingWords.forEach(char => {
+          const cleanChar = char.trim().replace(/[\s，。、！？：；,\.!?:;]+/g, "");
+          preloadedWordsRef.current.add(cleanChar);
+        });
+        
         vocabularyService.getOrCreateWordsBatch(missingWords)
           .then(words => {
             // Lưu vào cache
@@ -141,10 +212,17 @@ export default function VocabularyWordItem({ word, onDetailClick, viewMode = "li
           })
           .catch(error => {
             console.error("[VocabularyWordItem] Lỗi khi pre-load từ vựng:", error);
+            // Nếu lỗi, xóa khỏi Set để có thể thử lại
+            missingWords.forEach(char => {
+              const cleanChar = char.trim().replace(/[\s，。、！？：；,\.!?:;]+/g, "");
+              preloadedWordsRef.current.delete(cleanChar);
+            });
           });
       }
     }
-  }, [examples, allWords]);
+    // Chỉ chạy khi examples thay đổi, không phụ thuộc vào allWords
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examples]);
 
   // Format câu tiếng Trung: thêm khoảng trắng giữa các từ Hán để dễ chọn và nhận diện
   const formatChineseSentence = (sentence: string): string => {
@@ -728,7 +806,7 @@ export default function VocabularyWordItem({ word, onDetailClick, viewMode = "li
                         onClick={() => playAudio(example.character)}
                         disabled={isPlaying}
                         className="p-1 text-slate-300 hover:text-white transition-colors disabled:opacity-50 ml-2"
-                        title="Nghe phát âm"
+                        title="Nghe phát âm cả câu"
                       >
                         <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M8 5v14l11-7z" />
@@ -928,7 +1006,7 @@ export default function VocabularyWordItem({ word, onDetailClick, viewMode = "li
                         onClick={() => playAudio(example.character)}
                         disabled={isPlaying}
                         className="p-1.5 text-slate-300 hover:text-white transition-colors disabled:opacity-50 ml-2"
-                        title="Nghe phát âm"
+                        title="Nghe phát âm cả câu"
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M8 5v14l11-7z" />

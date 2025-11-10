@@ -1,6 +1,6 @@
+using HiHSK.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Text;
 
 namespace HiHSK.Api.Controllers;
 
@@ -11,60 +11,18 @@ namespace HiHSK.Api.Controllers;
 [Route("api/[controller]")]
 public class AudioController : ControllerBase
 {
-    /// <summary>
-    /// Generate audio URL cho từ vựng tiếng Trung bằng Text-to-Speech
-    /// </summary>
-    /// <param name="text">Text cần phát âm (chữ Hán)</param>
-    /// <param name="lang">Ngôn ngữ (mặc định: zh-CN)</param>
-    /// <returns>URL audio hoặc redirect đến audio service</returns>
-    [HttpGet("tts")]
-    public IActionResult GetTTS([FromQuery] string text, [FromQuery] string lang = "zh-CN")
+    private readonly TTSService _ttsService;
+    private readonly ILogger<AudioController> _logger;
+
+    public AudioController(TTSService ttsService, ILogger<AudioController> logger)
     {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return BadRequest(new { message = "Text không được để trống" });
-        }
-
-        // Option 1: Redirect đến Google TTS (miễn phí, không cần API key)
-        // Lưu ý: Google có thể chặn nếu request quá nhiều
-        var encodedText = Uri.EscapeDataString(text);
-        var googleTtsUrl = $"https://translate.google.com/translate_tts?ie=UTF-8&tl={lang}&client=tw-ob&q={encodedText}";
-        
-        // Redirect đến Google TTS
-        return Redirect(googleTtsUrl);
-        
-        // Option 2: Trả về URL để frontend tự xử lý
-        // return Ok(new { audioUrl = googleTtsUrl });
-        
-        // Option 3: Generate audio file và trả về (cần thư viện TTS)
-        // var audioBytes = GenerateAudioBytes(text, lang);
-        // return File(audioBytes, "audio/mpeg", "word.mp3");
-    }
-
-    /// <summary>
-    /// Lấy audio URL cho từ vựng (chỉ trả về URL, không redirect)
-    /// </summary>
-    [HttpGet("tts-url")]
-    public IActionResult GetTTSUrl([FromQuery] string text, [FromQuery] string lang = "zh-CN")
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return BadRequest(new { message = "Text không được để trống" });
-        }
-
-        var encodedText = Uri.EscapeDataString(text);
-        
-        // Google TTS URL
-        var audioUrl = $"https://translate.google.com/translate_tts?ie=UTF-8&tl={lang}&client=tw-ob&q={encodedText}";
-        
-        // Hoặc có thể dùng Baidu TTS (tốt hơn cho tiếng Trung)
-        // var audioUrl = $"https://fanyi.baidu.com/gettts?lan=zh&text={encodedText}&spd=3&source=web";
-        
-        return Ok(new { audioUrl });
+        _ttsService = ttsService;
+        _logger = logger;
     }
 
     /// <summary>
     /// Proxy audio từ Google TTS để tránh lỗi CORS
+    /// Có caching để tối ưu performance
     /// </summary>
     /// <param name="text">Text cần phát âm (chữ Hán)</param>
     /// <param name="lang">Ngôn ngữ (mặc định: zh-CN)</param>
@@ -75,45 +33,58 @@ public class AudioController : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(text))
         {
+            _logger.LogWarning("ProxyAudio được gọi với text rỗng");
             return BadRequest(new { message = "Text không được để trống" });
         }
 
         try
         {
-            var encodedText = Uri.EscapeDataString(text);
-            var googleTtsUrl = $"https://translate.google.com/translate_tts?ie=UTF-8&tl={lang}&client=tw-ob&q={encodedText}";
+            _logger.LogInformation("ProxyAudio request: text={Text}, lang={Lang}", text, lang);
 
-            using var httpClient = new HttpClient();
-            httpClient.Timeout = TimeSpan.FromSeconds(10);
-            
-            // Set User-Agent để tránh bị chặn
-            httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            var (audioStream, contentType) = await _ttsService.GetAudioStreamAsync(text, lang);
 
-            var response = await httpClient.GetAsync(googleTtsUrl);
-            
-            if (!response.IsSuccessStatusCode)
+            if (audioStream == null || audioStream.Length == 0)
             {
-                return StatusCode((int)response.StatusCode, new { message = "Không thể tải audio từ Google TTS" });
+                _logger.LogError("Không thể lấy audio cho text: {Text}, lang: {Lang}", text, lang);
+                return StatusCode(500, new { message = "Không thể tải audio từ Google TTS" });
             }
-
-            var audioBytes = await response.Content.ReadAsByteArrayAsync();
-            var contentType = response.Content.Headers.ContentType?.MediaType ?? "audio/mpeg";
 
             // Set CORS headers
             Response.Headers.Add("Access-Control-Allow-Origin", "*");
             Response.Headers.Add("Access-Control-Allow-Methods", "GET");
-            Response.Headers.Add("Cache-Control", "public, max-age=3600"); // Cache 1 giờ
+            Response.Headers.Add("Cache-Control", "public, max-age=43200"); // Cache 12 giờ (giống với memory cache)
 
-            return File(audioBytes, contentType);
+            _logger.LogInformation("Trả về audio thành công: size={Size} bytes, text={Text}", audioStream.Length, text);
+
+            // Trả về FileStreamResult với "audio/mpeg"
+            return new FileStreamResult(audioStream, "audio/mpeg");
         }
-        catch (TaskCanceledException)
+        catch (TimeoutException ex)
         {
-            return StatusCode(408, new { message = "Request timeout" });
+            _logger.LogError(ex, "Timeout khi lấy audio cho text: {Text}", text);
+            return StatusCode(408, new { message = "Request timeout", error = ex.Message });
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error khi lấy audio cho text: {Text}", text);
+            return StatusCode(502, new { message = "Lỗi khi kết nối đến Google TTS", error = ex.Message });
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Lỗi không xác định khi lấy audio cho text: {Text}", text);
             return StatusCode(500, new { message = "Lỗi khi tải audio", error = ex.Message });
         }
+    }
+
+    /// <summary>
+    /// Endpoint tương thích với frontend hiện tại: /api/tts?text=...
+    /// </summary>
+    [HttpGet("tts")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetTTS([FromQuery] string text, [FromQuery] string lang = "zh-CN")
+    {
+        // Redirect đến proxy endpoint
+        return await ProxyAudio(text, lang);
     }
 }
 

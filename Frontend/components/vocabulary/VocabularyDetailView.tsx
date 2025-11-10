@@ -46,11 +46,66 @@ export default function VocabularyDetailView({ word, onClose }: VocabularyDetail
     try {
       setIsPlaying(true);
       const audioText = text || word.character;
-      const audioUrl = word.audioUrl || getProxyAudioUrl(audioText);
+      
+      // Clean text để loại bỏ BOM
+      const cleanAudioText = audioText ? audioText.replace(/^\uFEFF/, "").trim() : "";
+      
+      // Nếu text khác với word.character, đây là example sentence - không dùng word.audioUrl
+      const isExampleSentence = text && text !== word.character;
+      
+      // Chỉ dùng word.audioUrl khi không phải example sentence
+      let audioUrl = !isExampleSentence ? word.audioUrl : null;
+      
+      // Nếu có audioUrl và là Google TTS URL, convert sang proxy URL
+      if (audioUrl) {
+        // Loại bỏ BOM từ URL string
+        audioUrl = audioUrl.replace(/%EF%BB%BF/gi, "");
+        
+        // Nếu là Google TTS URL, convert sang proxy URL
+        if (audioUrl.includes("translate.google.com/translate_tts")) {
+          try {
+            const url = new URL(audioUrl);
+            const q = url.searchParams.get("q");
+            const lang = url.searchParams.get("tl") || "zh-CN";
+            if (q) {
+              const decodedQ = decodeURIComponent(q);
+              const cleanedQ = decodedQ.replace(/^\uFEFF/, "").trim();
+              if (cleanedQ) {
+                audioUrl = getProxyAudioUrl(cleanedQ, lang);
+              } else {
+                audioUrl = getProxyAudioUrl(cleanAudioText);
+              }
+            } else {
+              audioUrl = getProxyAudioUrl(cleanAudioText);
+            }
+          } catch (e) {
+            console.warn("Không thể parse Google TTS URL, dùng text trực tiếp:", e);
+            audioUrl = getProxyAudioUrl(cleanAudioText);
+          }
+        }
+      } else {
+        // Nếu không có audioUrl, generate từ text (luôn dùng proxy URL)
+        audioUrl = getProxyAudioUrl(cleanAudioText);
+      }
+      
+      // Kiểm tra audioUrl trước khi tạo Audio object
+      if (!audioUrl || audioUrl.trim() === '') {
+        console.warn("AudioUrl không hợp lệ:", audioUrl);
+        setIsPlaying(false);
+        return;
+      }
+      
       const audio = new Audio(audioUrl);
-      await audio.play();
+      
+      // Thêm error handler trước khi play
+      audio.onerror = (e) => {
+        console.error("Lỗi khi load audio:", e, "URL:", audioUrl);
+        setIsPlaying(false);
+      };
+      
       audio.onended = () => setIsPlaying(false);
-      audio.onerror = () => setIsPlaying(false);
+      
+      await audio.play();
     } catch (error) {
       console.error("Lỗi phát audio:", error);
       setIsPlaying(false);
@@ -402,7 +457,7 @@ export default function VocabularyDetailView({ word, onClose }: VocabularyDetail
                       onClick={() => playAudio(example.character)}
                       disabled={isPlaying}
                       className="p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-50 ml-3 flex-shrink-0"
-                      title="Nghe phát âm"
+                      title="Nghe phát âm cả câu"
                     >
                       <svg
                         className="w-5 h-5"

@@ -1,3 +1,5 @@
+using HiHSK.Application.DTOs;
+using HiHSK.Application.Interfaces;
 using HiHSK.Domain.Entities;
 using HiHSK.Infrastructure.Data;
 using Microsoft.AspNetCore.Authorization;
@@ -18,11 +20,16 @@ public class AdminController : ControllerBase
 {
     private readonly ApplicationDbContext _context;
     private readonly ILogger<AdminController> _logger;
+    private readonly IWordClassificationService _wordClassificationService;
 
-    public AdminController(ApplicationDbContext context, ILogger<AdminController> logger)
+    public AdminController(
+        ApplicationDbContext context, 
+        ILogger<AdminController> logger,
+        IWordClassificationService wordClassificationService)
     {
         _context = context;
         _logger = logger;
+        _wordClassificationService = wordClassificationService;
     }
 
     /// <summary>
@@ -393,5 +400,800 @@ public class AdminController : ControllerBase
             });
         }
     }
+
+    // ============ WORDS MANAGEMENT ============
+
+    /// <summary>
+    /// Lấy danh sách từ vựng (Admin) với filter
+    /// </summary>
+    [HttpGet("words")]
+    [AllowAnonymous] // Tạm thời cho phép không cần auth
+    public async Task<IActionResult> GetWords([FromQuery] int? hskLevel, [FromQuery] string? search)
+    {
+        try
+        {
+            var query = _context.Words.AsQueryable();
+
+            if (hskLevel.HasValue)
+            {
+                query = query.Where(w => w.HSKLevel == hskLevel.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                search = search.Trim();
+                query = query.Where(w =>
+                    w.Character.Contains(search) ||
+                    (w.Pinyin != null && w.Pinyin.Contains(search)) ||
+                    (w.Meaning != null && w.Meaning.Contains(search))
+                );
+            }
+
+            var words = await query
+                .OrderBy(w => w.HSKLevel)
+                .ThenBy(w => w.Character)
+                .Select(w => new
+                {
+                    id = w.Id,
+                    character = w.Character,
+                    pinyin = w.Pinyin,
+                    meaning = w.Meaning,
+                    hskLevel = w.HSKLevel,
+                    topicId = w.TopicId,
+                    audioUrl = w.AudioUrl,
+                    exampleSentence = w.ExampleSentence,
+                    createdAt = w.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(words);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi lấy danh sách từ vựng");
+            return StatusCode(500, new { message = "Lỗi khi lấy danh sách từ vựng", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Lấy chi tiết từ vựng (Admin)
+    /// </summary>
+    [HttpGet("words/{id}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetWordById(int id)
+    {
+        try
+        {
+            var word = await _context.Words
+                .Where(w => w.Id == id)
+                .Select(w => new
+                {
+                    id = w.Id,
+                    character = w.Character,
+                    pinyin = w.Pinyin,
+                    meaning = w.Meaning,
+                    hskLevel = w.HSKLevel,
+                    topicId = w.TopicId,
+                    audioUrl = w.AudioUrl,
+                    exampleSentence = w.ExampleSentence,
+                    createdAt = w.CreatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (word == null)
+            {
+                return NotFound(new { message = "Không tìm thấy từ vựng" });
+            }
+
+            return Ok(word);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi lấy chi tiết từ vựng");
+            return StatusCode(500, new { message = "Lỗi khi lấy chi tiết từ vựng", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Tạo từ vựng mới
+    /// </summary>
+    [HttpPost("words")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CreateWord([FromBody] CreateWordDto dto)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dto.Character) ||
+                string.IsNullOrWhiteSpace(dto.Pinyin) ||
+                string.IsNullOrWhiteSpace(dto.Meaning))
+            {
+                return BadRequest(new { message = "Character, Pinyin và Meaning là bắt buộc" });
+            }
+
+            var word = new Word
+            {
+                Character = dto.Character.Trim(),
+                Pinyin = dto.Pinyin.Trim(),
+                Meaning = dto.Meaning.Trim(),
+                HSKLevel = dto.HskLevel,
+                TopicId = dto.TopicId,
+                AudioUrl = dto.AudioUrl,
+                ExampleSentence = dto.ExampleSentence,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Words.Add(word);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                id = word.Id,
+                character = word.Character,
+                pinyin = word.Pinyin,
+                meaning = word.Meaning,
+                hskLevel = word.HSKLevel,
+                topicId = word.TopicId,
+                audioUrl = word.AudioUrl,
+                exampleSentence = word.ExampleSentence,
+                createdAt = word.CreatedAt
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi tạo từ vựng");
+            return StatusCode(500, new { message = "Lỗi khi tạo từ vựng", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Cập nhật từ vựng
+    /// </summary>
+    [HttpPut("words/{id}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> UpdateWord(int id, [FromBody] UpdateWordDto dto)
+    {
+        try
+        {
+            var word = await _context.Words.FindAsync(id);
+            if (word == null)
+            {
+                return NotFound(new { message = "Không tìm thấy từ vựng" });
+            }
+
+            if (!string.IsNullOrWhiteSpace(dto.Character))
+                word.Character = dto.Character.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.Pinyin))
+                word.Pinyin = dto.Pinyin.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.Meaning))
+                word.Meaning = dto.Meaning.Trim();
+            if (dto.HskLevel.HasValue)
+                word.HSKLevel = dto.HskLevel;
+            if (dto.TopicId.HasValue)
+                word.TopicId = dto.TopicId;
+            if (dto.AudioUrl != null)
+                word.AudioUrl = dto.AudioUrl;
+            if (dto.ExampleSentence != null)
+                word.ExampleSentence = dto.ExampleSentence;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                id = word.Id,
+                character = word.Character,
+                pinyin = word.Pinyin,
+                meaning = word.Meaning,
+                hskLevel = word.HSKLevel,
+                topicId = word.TopicId,
+                audioUrl = word.AudioUrl,
+                exampleSentence = word.ExampleSentence,
+                createdAt = word.CreatedAt
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi cập nhật từ vựng");
+            return StatusCode(500, new { message = "Lỗi khi cập nhật từ vựng", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Xóa từ vựng
+    /// </summary>
+    [HttpDelete("words/{id}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> DeleteWord(int id)
+    {
+        try
+        {
+            var word = await _context.Words.FindAsync(id);
+            if (word == null)
+            {
+                return NotFound(new { message = "Không tìm thấy từ vựng" });
+            }
+
+            _context.Words.Remove(word);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Đã xóa từ vựng thành công" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi xóa từ vựng");
+            return StatusCode(500, new { message = "Lỗi khi xóa từ vựng", error = ex.Message });
+        }
+    }
+
+    // ============ MEDIA MANAGEMENT ============
+
+    /// <summary>
+    /// Upload media files (images/audio)
+    /// </summary>
+    [HttpPost("media/upload")]
+    [AllowAnonymous]
+    public async Task<IActionResult> UploadMedia([FromForm] List<IFormFile> files)
+    {
+        try
+        {
+            if (files == null || files.Count == 0)
+            {
+                return BadRequest(new { message = "Không có file nào được upload" });
+            }
+
+            var uploadedFiles = new List<object>();
+            var uploadPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+
+            if (!Directory.Exists(uploadPath))
+            {
+                Directory.CreateDirectory(uploadPath);
+            }
+
+            foreach (var file in files)
+            {
+                if (file.Length > 0)
+                {
+                    var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".mp3", ".wav", ".webp" };
+                    var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+
+                    if (!allowedExtensions.Contains(extension))
+                    {
+                        continue; // Skip invalid files
+                    }
+
+                    var fileName = $"{Guid.NewGuid()}{extension}";
+                    var filePath = Path.Combine(uploadPath, fileName);
+
+                    using (var stream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await file.CopyToAsync(stream);
+                    }
+
+                    var fileUrl = $"/uploads/{fileName}";
+                    uploadedFiles.Add(new
+                    {
+                        fileName = file.FileName,
+                        url = fileUrl,
+                        size = file.Length,
+                        contentType = file.ContentType
+                    });
+                }
+            }
+
+            return Ok(new
+            {
+                message = "Upload thành công",
+                files = uploadedFiles
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi upload media");
+            return StatusCode(500, new { message = "Lỗi khi upload media", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Lấy danh sách media
+    /// </summary>
+    [HttpGet("media")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetMedia([FromQuery] string? search)
+    {
+        try
+        {
+            // TODO: Implement media library with database storage
+            return Ok(new { message = "Chức năng này sẽ được implement sau", media = new List<object>() });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi lấy danh sách media");
+            return StatusCode(500, new { message = "Lỗi khi lấy danh sách media", error = ex.Message });
+        }
+    }
+
+    // ============ QUIZ MANAGEMENT ============
+
+    /// <summary>
+    /// Tạo quiz từ danh sách từ vựng
+    /// </summary>
+    [HttpPost("quizzes")]
+    [AllowAnonymous]
+    public async Task<IActionResult> CreateQuiz([FromBody] CreateQuizDto dto)
+    {
+        try
+        {
+            // TODO: Implement quiz creation logic
+            return Ok(new
+            {
+                message = "Quiz đã được tạo thành công",
+                quizId = 0,
+                wordCount = dto.WordIds?.Count ?? 0
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi tạo quiz");
+            return StatusCode(500, new { message = "Lỗi khi tạo quiz", error = ex.Message });
+        }
+    }
+
+    // ============ EXPORT/IMPORT ============
+
+    /// <summary>
+    /// Lấy danh sách từ vựng chưa có HSK level và xuất ra JSON
+    /// </summary>
+    [HttpGet("words/without-hsk-level/export")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ExportWordsWithoutHskLevel()
+    {
+        try
+        {
+            var words = await _context.Words
+                .Where(w => w.HSKLevel == null)
+                .OrderBy(w => w.Character)
+                .Select(w => new
+                {
+                    id = w.Id,
+                    character = w.Character,
+                    pinyin = w.Pinyin,
+                    meaning = w.Meaning,
+                    audioUrl = w.AudioUrl,
+                    exampleSentence = w.ExampleSentence,
+                    frequency = w.Frequency,
+                    strokeCount = w.StrokeCount,
+                    topicId = w.TopicId,
+                    createdAt = w.CreatedAt
+                })
+                .ToListAsync();
+
+            var result = new
+            {
+                totalCount = words.Count,
+                exportedAt = DateTime.UtcNow,
+                words = words
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(result, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            });
+
+            var fileName = $"words-without-hsk-level_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
+            var contentType = "application/json";
+
+            return File(
+                System.Text.Encoding.UTF8.GetBytes(json),
+                contentType,
+                fileName
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi export từ vựng chưa có HSK level");
+            return StatusCode(500, new { message = "Lỗi khi export từ vựng", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Lấy danh sách từ vựng chưa có HSK level (API response, không download file)
+    /// </summary>
+    [HttpGet("words/without-hsk-level")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetWordsWithoutHskLevel()
+    {
+        try
+        {
+            var words = await _context.Words
+                .Where(w => w.HSKLevel == null)
+                .OrderBy(w => w.Character)
+                .Select(w => new
+                {
+                    id = w.Id,
+                    character = w.Character,
+                    pinyin = w.Pinyin,
+                    meaning = w.Meaning,
+                    audioUrl = w.AudioUrl,
+                    exampleSentence = w.ExampleSentence,
+                    frequency = w.Frequency,
+                    strokeCount = w.StrokeCount,
+                    topicId = w.TopicId,
+                    createdAt = w.CreatedAt
+                })
+                .ToListAsync();
+
+            return Ok(new
+            {
+                totalCount = words.Count,
+                words = words
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi lấy danh sách từ vựng chưa có HSK level");
+            return StatusCode(500, new { message = "Lỗi khi lấy danh sách từ vựng", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Phân loại từ vựng theo chủ đề (LessonTopic)
+    /// </summary>
+    [HttpPost("words/classify-by-topic")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ClassifyWordsByTopic([FromBody] ClassifyWordsRequest request)
+    {
+        try
+        {
+            if (request.WordIds == null || !request.WordIds.Any())
+            {
+                return BadRequest(new { message = "Danh sách wordIds không được rỗng" });
+            }
+
+            var classification = await _wordClassificationService.ClassifyWordsByTopicAsync(
+                request.WordIds, 
+                request.HskLevel);
+
+            return Ok(new
+            {
+                message = "Phân loại thành công",
+                classification = classification,
+                totalWords = request.WordIds.Count,
+                classifiedWords = classification.Values.Sum(v => v.Count)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi phân loại từ vựng");
+            return StatusCode(500, new { message = "Lỗi khi phân loại từ vựng", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Tự động tổ chức từ vựng HSK1 thành các LessonTopics
+    /// </summary>
+    [HttpPost("lessontopics/auto-organize-hsk1")]
+    [AllowAnonymous]
+    public async Task<IActionResult> AutoOrganizeHSK1(
+        [FromQuery] string strategy = "thematic",
+        [FromQuery] int? wordsPerTopic = null)
+    {
+        try
+        {
+            var result = await _wordClassificationService.AutoOrganizeHSK1Async(strategy, wordsPerTopic);
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi tự động tổ chức từ vựng HSK1");
+            return StatusCode(500, new { message = "Lỗi khi tự động tổ chức", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Gán từ vựng vào topic cụ thể
+    /// </summary>
+    [HttpPost("words/assign-to-topic")]
+    [AllowAnonymous]
+    public async Task<IActionResult> AssignWordsToTopic([FromBody] AssignWordsToTopicRequest request)
+    {
+        try
+        {
+            if (request.WordIds == null || !request.WordIds.Any())
+            {
+                return BadRequest(new { message = "Danh sách wordIds không được rỗng" });
+            }
+
+            var success = await _wordClassificationService.AssignWordsToTopicAsync(
+                request.WordIds, 
+                request.TopicId);
+
+            if (success)
+            {
+                return Ok(new
+                {
+                    message = $"Đã gán {request.WordIds.Count} từ vựng vào topic {request.TopicId}",
+                    wordCount = request.WordIds.Count,
+                    topicId = request.TopicId
+                });
+            }
+
+            return StatusCode(500, new { message = "Không thể gán từ vựng vào topic" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi gán từ vựng vào topic");
+            return StatusCode(500, new { message = "Lỗi khi gán từ vựng", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Gợi ý topic phù hợp cho từ vựng
+    /// </summary>
+    [HttpGet("words/{wordId}/suggest-topic")]
+    [AllowAnonymous]
+    public async Task<IActionResult> SuggestTopicForWord(
+        [FromRoute] int wordId,
+        [FromQuery] int hskLevel = 1)
+    {
+        try
+        {
+            var topicId = await _wordClassificationService.SuggestTopicForWordAsync(wordId, hskLevel);
+
+            if (topicId.HasValue)
+            {
+                var topic = await _context.LessonTopics.FindAsync(topicId.Value);
+                return Ok(new
+                {
+                    wordId = wordId,
+                    suggestedTopicId = topicId.Value,
+                    suggestedTopicTitle = topic?.Title
+                });
+            }
+
+            return NotFound(new { message = "Không tìm thấy topic phù hợp" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi gợi ý topic cho từ vựng");
+            return StatusCode(500, new { message = "Lỗi khi gợi ý topic", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Export dữ liệu ra JSON để backup
+    /// </summary>
+    [HttpGet("words/export")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ExportWords(
+        [FromQuery] int? hskLevel = null,
+        [FromQuery] bool includeTopics = true,
+        [FromQuery] bool includeLessons = true,
+        [FromQuery] bool includeQuestions = false)
+    {
+        try
+        {
+            _logger.LogInformation($"Bắt đầu export dữ liệu - HSKLevel: {hskLevel}, IncludeTopics: {includeTopics}");
+
+            var exportData = new ExportDataDto();
+
+            // Export CourseCategories
+            var categories = await _context.CourseCategories
+                .Where(c => hskLevel == null || c.Name.Contains($"HSK{hskLevel}"))
+                .OrderBy(c => c.SortOrder)
+                .ToListAsync();
+
+            exportData.CourseCategories = categories.Select(c => new CourseCategoryExportDto
+            {
+                Id = c.Id,
+                Name = c.Name,
+                DisplayName = c.DisplayName,
+                Description = c.Description,
+                IconUrl = c.IconUrl,
+                SortOrder = c.SortOrder
+            }).ToList();
+
+            // Export Courses
+            var courses = await _context.Courses
+                .Where(c => hskLevel == null || c.HSKLevel == hskLevel)
+                .OrderBy(c => c.SortOrder)
+                .ToListAsync();
+
+            exportData.Courses = courses.Select(c => new CourseExportDto
+            {
+                Id = c.Id,
+                CategoryId = c.CategoryId,
+                Title = c.Title,
+                Description = c.Description,
+                ImageUrl = c.ImageUrl,
+                Level = c.Level,
+                HSKLevel = c.HSKLevel,
+                SortOrder = c.SortOrder,
+                IsActive = c.IsActive
+            }).ToList();
+
+            // Export Lessons (nếu có)
+            if (includeLessons)
+            {
+                var courseIds = courses.Select(c => c.Id).ToList();
+                var lessons = await _context.Lessons
+                    .Where(l => courseIds.Contains(l.CourseId))
+                    .OrderBy(l => l.LessonIndex)
+                    .ToListAsync();
+
+                exportData.Lessons = lessons.Select(l => new LessonExportDto
+                {
+                    Id = l.Id,
+                    CourseId = l.CourseId,
+                    Title = l.Title,
+                    Description = l.Description,
+                    LessonIndex = l.LessonIndex,
+                    Content = l.Content,
+                    IsLocked = l.IsLocked,
+                    PrerequisiteLessonId = l.PrerequisiteLessonId,
+                    IsActive = l.IsActive
+                }).ToList();
+            }
+
+            // Export LessonTopics (nếu có)
+            if (includeTopics)
+            {
+                var topics = await _context.LessonTopics
+                    .Where(t => hskLevel == null || t.HSKLevel == hskLevel)
+                    .OrderBy(t => t.TopicIndex)
+                    .ToListAsync();
+
+                exportData.LessonTopics = topics.Select(t => new LessonTopicExportDto
+                {
+                    Id = t.Id,
+                    CourseId = t.CourseId,
+                    HSKLevel = t.HSKLevel,
+                    Title = t.Title,
+                    Description = t.Description,
+                    ImageUrl = t.ImageUrl,
+                    TopicIndex = t.TopicIndex,
+                    IsLocked = t.IsLocked,
+                    PrerequisiteTopicId = t.PrerequisiteTopicId,
+                    IsActive = t.IsActive
+                }).ToList();
+            }
+
+            // Export Words
+            var wordsQuery = _context.Words.AsQueryable();
+            if (hskLevel.HasValue)
+            {
+                wordsQuery = wordsQuery.Where(w => w.HSKLevel == hskLevel);
+            }
+
+            var words = await wordsQuery
+                .OrderBy(w => w.Id)
+                .ToListAsync();
+
+            exportData.Words = words.Select(w => new WordExportDto
+            {
+                Id = w.Id,
+                TopicId = w.TopicId,
+                Character = w.Character,
+                Pinyin = w.Pinyin,
+                Meaning = w.Meaning,
+                AudioUrl = w.AudioUrl,
+                ExampleSentence = w.ExampleSentence,
+                HSKLevel = w.HSKLevel,
+                Frequency = w.Frequency,
+                StrokeCount = w.StrokeCount
+            }).ToList();
+
+            // Export Questions (nếu có)
+            if (includeQuestions)
+            {
+                var lessonIds = exportData.Lessons.Select(l => l.Id).ToList();
+                var questions = await _context.Questions
+                    .Where(q => lessonIds.Contains(q.LessonId ?? 0))
+                    .Include(q => q.QuestionOptions)
+                    .ToListAsync();
+
+                exportData.Questions = questions.Select(q => new QuestionExportDto
+                    {
+                        Id = q.Id,
+                        LessonId = q.LessonId,
+                        ExerciseId = q.ExerciseId,
+                        QuestionText = q.QuestionText,
+                        QuestionType = q.QuestionType,
+                        AudioUrl = q.AudioUrl,
+                        Points = q.Points,
+                        DifficultyLevel = q.DifficultyLevel,
+                        Explanation = q.Explanation,
+                        Options = q.QuestionOptions
+                            .OrderBy(o => o.OptionLabel)
+                            .Select((o, index) => new QuestionOptionExportDto
+                            {
+                                Id = o.Id,
+                                OptionText = o.OptionText,
+                                IsCorrect = o.IsCorrect,
+                                OptionOrder = index
+                            }).ToList()
+                }).ToList();
+            }
+
+            // Metadata
+            exportData.Metadata = new ExportMetadata
+            {
+                ExportedAt = DateTime.UtcNow,
+                TotalWords = exportData.Words.Count,
+                TotalTopics = exportData.LessonTopics.Count,
+                TotalLessons = exportData.Lessons.Count,
+                Version = "1.0"
+            };
+
+            _logger.LogInformation($"Export thành công: {exportData.Words.Count} từ vựng, {exportData.LessonTopics.Count} topics");
+
+            // Trả về JSON file
+            var jsonOptions = new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(exportData, jsonOptions);
+            var fileName = hskLevel.HasValue 
+                ? $"export-hsk{hskLevel}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json"
+                : $"export-all-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
+
+            return File(
+                System.Text.Encoding.UTF8.GetBytes(json),
+                "application/json",
+                fileName
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi export dữ liệu");
+            return StatusCode(500, new { message = "Lỗi khi export dữ liệu", error = ex.Message });
+        }
+    }
+}
+
+// ============ Request DTOs ============
+
+public class CreateWordDto
+{
+    public string Character { get; set; } = string.Empty;
+    public string Pinyin { get; set; } = string.Empty;
+    public string Meaning { get; set; } = string.Empty;
+    public int? HskLevel { get; set; }
+    public int? TopicId { get; set; }
+    public string? AudioUrl { get; set; }
+    public string? ExampleSentence { get; set; }
+}
+
+public class ClassifyWordsRequest
+{
+    public List<int> WordIds { get; set; } = new();
+    public int HskLevel { get; set; } = 1;
+}
+
+public class AssignWordsToTopicRequest
+{
+    public List<int> WordIds { get; set; } = new();
+    public int TopicId { get; set; }
+}
+
+public class UpdateWordDto
+{
+    public string? Character { get; set; }
+    public string? Pinyin { get; set; }
+    public string? Meaning { get; set; }
+    public int? HskLevel { get; set; }
+    public int? TopicId { get; set; }
+    public string? AudioUrl { get; set; }
+    public string? ExampleSentence { get; set; }
+}
+
+public class CreateQuizDto
+{
+    public string Title { get; set; } = string.Empty;
+    public List<int>? WordIds { get; set; }
+    public int? HskLevel { get; set; }
 }
 

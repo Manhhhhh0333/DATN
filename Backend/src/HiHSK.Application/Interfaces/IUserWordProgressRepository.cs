@@ -12,5 +12,6 @@ public interface IUserWordProgressRepository
     Task<int> GetLearningWordsCountAsync(string userId, int? topicId = null);
     Task<int> GetMasteredWordsCountAsync(string userId, int? topicId = null);
     Task<int> GetWordsDueTodayCountAsync(string userId, int? topicId = null);
+    Task<List<UserWordProgress>> GetUserWordProgressesByWordIdsAsync(string userId, List<int> wordIds);
 }
 

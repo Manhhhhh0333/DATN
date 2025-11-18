@@ -1,3 +1,4 @@
+
 using HiHSK.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -123,4 +124,3 @@ public class GenerateExampleRequest
 {
     public string Word { get; set; } = string.Empty;
 }
-

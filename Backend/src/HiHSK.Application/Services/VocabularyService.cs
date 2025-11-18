@@ -9,15 +9,18 @@ public class VocabularyService : IVocabularyService
 {
     private readonly IVocabularyRepository _vocabularyRepository;
     private readonly IUserWordProgressRepository _userProgressRepository;
+    private readonly IActivityProgressRepository _activityProgressRepository;
     private readonly GeminiService _geminiService;
 
     public VocabularyService(
         IVocabularyRepository vocabularyRepository,
         IUserWordProgressRepository userProgressRepository,
+        IActivityProgressRepository activityProgressRepository,
         GeminiService geminiService)
     {
         _vocabularyRepository = vocabularyRepository;
         _userProgressRepository = userProgressRepository;
+        _activityProgressRepository = activityProgressRepository;
         _geminiService = geminiService;
     }
 
@@ -75,6 +78,8 @@ public class VocabularyService : IVocabularyService
                     wordDto.Progress = new UserWordProgressDto
                     {
                         Id = progress.Id,
+                        UserId = progress.UserId,
+                        WordId = progress.WordId,
                         Status = progress.Status,
                         NextReviewDate = progress.NextReviewDate,
                         ReviewCount = progress.ReviewCount,
@@ -135,6 +140,8 @@ public class VocabularyService : IVocabularyService
                 Progress = progress != null ? new UserWordProgressDto
                 {
                     Id = progress.Id,
+                    UserId = progress.UserId,
+                    WordId = progress.WordId,
                     Status = progress.Status,
                     NextReviewDate = progress.NextReviewDate,
                     ReviewCount = progress.ReviewCount,
@@ -243,6 +250,8 @@ public class VocabularyService : IVocabularyService
                     wordDto.Progress = new UserWordProgressDto
                     {
                         Id = progress.Id,
+                        UserId = progress.UserId,
+                        WordId = progress.WordId,
                         Status = progress.Status,
                         NextReviewDate = progress.NextReviewDate,
                         ReviewCount = progress.ReviewCount,
@@ -301,6 +310,8 @@ public class VocabularyService : IVocabularyService
                     wordDto.Progress = new UserWordProgressDto
                     {
                         Id = progress.Id,
+                        UserId = progress.UserId,
+                        WordId = progress.WordId,
                         Status = progress.Status,
                         NextReviewDate = progress.NextReviewDate,
                         ReviewCount = progress.ReviewCount,
@@ -315,7 +326,8 @@ public class VocabularyService : IVocabularyService
         }
 
         // 2. Từ chưa tồn tại, gọi Gemini API để generate thông tin
-        WordInfoDto wordInfo;
+        WordInfoDto wordInfo = null;
+        bool aiFailed = false;
         try
         {
             Console.WriteLine($"[VocabularyService] Bắt đầu gọi Gemini API cho character '{character}'");
@@ -342,15 +354,25 @@ public class VocabularyService : IVocabularyService
             {
                 Console.WriteLine($"[VocabularyService] InnerException: {ex.InnerException.Message}");
             }
-            throw new Exception($"Không thể generate thông tin từ vựng từ AI: {ex.Message}", ex);
+            
+            // Thay vì throw exception, tạo word với thông tin tối thiểu
+            aiFailed = true;
+            wordInfo = new WordInfoDto
+            {
+                Pinyin = "", // Sẽ được parse từ client nếu có
+                Meaning = "Không thể tải thông tin từ AI. Vui lòng thử lại sau.",
+                Examples = new List<WordExampleDto>()
+            };
+            Console.WriteLine($"[VocabularyService] ⚠️ Tạo word với thông tin tối thiểu do AI fail");
         }
 
         // 3. Tạo từ mới (KHÔNG gán WordExamples vào navigation property để tránh lỗi tracking)
+        // Nếu AI fail, vẫn tạo word với thông tin tối thiểu
         var newWord = new Word
         {
             Character = character,
-            Pinyin = wordInfo.Pinyin,
-            Meaning = wordInfo.Meaning,
+            Pinyin = wordInfo?.Pinyin ?? "", // Có thể để trống nếu AI fail
+            Meaning = wordInfo?.Meaning ?? "Không thể tải thông tin từ AI. Vui lòng thử lại sau.",
             CreatedAt = DateTime.UtcNow
         };
 
@@ -381,8 +403,8 @@ public class VocabularyService : IVocabularyService
             throw new Exception($"Không thể lưu từ vựng vào database: {ex.Message}", ex);
         }
 
-        // 5. Lưu WordExamples sau khi Word đã có Id
-        if (wordInfo.Examples != null && wordInfo.Examples.Any())
+        // 5. Lưu WordExamples sau khi Word đã có Id (chỉ khi AI thành công)
+        if (!aiFailed && wordInfo != null && wordInfo.Examples != null && wordInfo.Examples.Any())
         {
             try
             {
@@ -480,7 +502,12 @@ public class VocabularyService : IVocabularyService
         }
     }
 
-    public async Task<Dictionary<string, WordWithProgressDto>> GetOrCreateWordsBatchAsync(List<string> characters, string? userId = null)
+    public async Task<Dictionary<string, WordWithProgressDto>> GetOrCreateWordsBatchAsync(
+        List<string> characters, 
+        string? userId = null,
+        int batchSize = 5,
+        int maxRetries = 2,
+        int delayBetweenBatchesMs = 500)
     {
         var result = new Dictionary<string, WordWithProgressDto>();
         
@@ -495,33 +522,291 @@ public class VocabularyService : IVocabularyService
             return result;
         }
 
-        // Lấy tất cả từ cùng lúc (song song) để tối ưu performance
-        var tasks = uniqueCharacters.Select(async character =>
-        {
-            try
-            {
-                var word = await GetOrCreateWordByCharacterAsync(character, userId);
-                return new { Character = character, Word = word };
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[VocabularyService] Lỗi khi get/create word '{character}' trong batch: {ex.Message}");
-                return new { Character = character, Word = (WordWithProgressDto?)null };
-            }
-        });
+        Console.WriteLine($"[VocabularyService] Bắt đầu batch process cho {uniqueCharacters.Count} từ (batchSize={batchSize}, maxRetries={maxRetries})");
 
-        var results = await Task.WhenAll(tasks);
-
-        // Build dictionary
-        foreach (var item in results)
+        // Xử lý theo batch nhỏ để tránh quá tải Gemini API
+        for (int i = 0; i < uniqueCharacters.Count; i += batchSize)
         {
-            if (item.Word != null)
+            var batch = uniqueCharacters.Skip(i).Take(batchSize).ToList();
+            var batchNumber = (i / batchSize) + 1;
+            var totalBatches = (int)Math.Ceiling((double)uniqueCharacters.Count / batchSize);
+            
+            Console.WriteLine($"[VocabularyService] Đang xử lý batch {batchNumber}/{totalBatches} ({batch.Count} từ)");
+
+            // Xử lý từng từ trong batch (song song trong batch)
+            var batchTasks = batch.Select(async character =>
             {
-                result[item.Character] = item.Word;
+                int retryCount = 0;
+                Exception? lastException = null;
+
+                // Retry mechanism
+                while (retryCount < maxRetries)
+                {
+                    try
+                    {
+                        // Timeout cho mỗi từ (30s)
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                        var word = await GetOrCreateWordByCharacterAsync(character, userId);
+                        
+                        Console.WriteLine($"[VocabularyService] ✅ Thành công: '{character}' (retry {retryCount})");
+                        return new { Character = character, Word = word, Success = true };
+                    }
+                    catch (Exception ex)
+                    {
+                        lastException = ex;
+                        retryCount++;
+                        
+                        Console.WriteLine($"[VocabularyService] ❌ Lỗi '{character}' (retry {retryCount}/{maxRetries}): {ex.Message}");
+                        
+                        if (retryCount < maxRetries)
+                        {
+                            // Exponential backoff: 1s, 2s, 4s...
+                            var delayMs = 1000 * (int)Math.Pow(2, retryCount - 1);
+                            Console.WriteLine($"[VocabularyService] Đợi {delayMs}ms trước khi retry...");
+                            await Task.Delay(delayMs);
+                        }
+                    }
+                }
+
+                // Nếu fail hết retries, tạo word với thông tin tối thiểu
+                Console.WriteLine($"[VocabularyService] ⚠️ Fail sau {maxRetries} retries cho '{character}', tạo word với thông tin tối thiểu");
+                
+                try
+                {
+                    // Tạo word minimal trong database
+                    var minimalWord = new Word
+                    {
+                        Character = character,
+                        Pinyin = "",
+                        Meaning = $"Không thể tải thông tin (lỗi {maxRetries} lần). Vui lòng thử lại sau.",
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    
+                    await _vocabularyRepository.AddWordAsync(minimalWord);
+                    
+                    var wordDto = new WordWithProgressDto
+                    {
+                        Id = minimalWord.Id,
+                        Character = minimalWord.Character,
+                        Pinyin = minimalWord.Pinyin,
+                        Meaning = minimalWord.Meaning,
+                        Examples = new List<WordExampleDto>()
+                    };
+                    
+                    return new { Character = character, Word = wordDto, Success = false };
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[VocabularyService] ❌ Không thể tạo minimal word cho '{character}': {ex.Message}");
+                    return new { Character = character, Word = (WordWithProgressDto?)null, Success = false };
+                }
+            });
+
+            var batchResults = await Task.WhenAll(batchTasks);
+
+            // Thêm vào result
+            foreach (var item in batchResults)
+            {
+                if (item.Word != null)
+                {
+                    result[item.Character] = item.Word;
+                }
+            }
+
+            // Delay giữa các batch (trừ batch cuối)
+            if (i + batchSize < uniqueCharacters.Count)
+            {
+                Console.WriteLine($"[VocabularyService] Đợi {delayBetweenBatchesMs}ms trước batch tiếp theo...");
+                await Task.Delay(delayBetweenBatchesMs);
             }
         }
 
+        Console.WriteLine($"[VocabularyService] ✅ Hoàn thành batch process: {result.Count}/{uniqueCharacters.Count} từ thành công");
         return result;
+    }
+
+    public async Task<PartProgressDto> GetPartProgressAsync(int hskLevel, int partNumber, string userId)
+    {
+        // Lấy danh sách từ trong part
+        var words = await GetWordsByHSKLevelAndPartAsync(hskLevel, partNumber, userId);
+
+        // Tính toán thống kê từ vựng
+        var totalWords = words.Count;
+        var masteredWords = words.Count(w => w.Progress?.Status == "Mastered");
+        var learningWords = words.Count(w => w.Progress?.Status == "Learning");
+        var newWords = words.Count(w => w.Progress == null || w.Progress.Status == "New");
+
+        // Kiểm tra điều kiện: tất cả từ vựng đã được đánh dấu là "đã học" (Learning hoặc Mastered)
+        var allWordsLearned = totalWords > 0 && words.All(w => 
+            w.Progress != null && 
+            (w.Progress.Status == "Learning" || w.Progress.Status == "Mastered"));
+
+        // Lấy activity progress từ database
+        var activityProgresses = await _activityProgressRepository.GetUserActivityProgressByPartAsync(userId, hskLevel, partNumber);
+        var completedActivityIds = activityProgresses.Where(p => p.IsCompleted).Select(p => p.ActivityId).ToHashSet();
+
+        // Định nghĩa các hoạt động học tập - ĐỌC TỪ DATABASE thay vì dùng allWordsLearned
+        var activities = new List<ActivityProgressDto>
+        {
+            new ActivityProgressDto
+            {
+                ActivityId = "vocabulary",
+                ActivityName = "Từ vựng",
+                IsCompleted = completedActivityIds.Contains("vocabulary")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "quick-memorize",
+                ActivityName = "Nhớ nhanh từ",
+                IsCompleted = completedActivityIds.Contains("quick-memorize")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "true-false",
+                ActivityName = "Chọn đúng sai",
+                IsCompleted = completedActivityIds.Contains("true-false")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "true-false-sentence",
+                ActivityName = "Chọn đúng sai với câu",
+                IsCompleted = completedActivityIds.Contains("true-false-sentence")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "listen-image",
+                ActivityName = "Nghe câu chọn hình ảnh",
+                IsCompleted = completedActivityIds.Contains("listen-image")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "match-sentence",
+                ActivityName = "Ghép câu",
+                IsCompleted = completedActivityIds.Contains("match-sentence")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "fill-blank",
+                ActivityName = "Điền từ",
+                IsCompleted = completedActivityIds.Contains("fill-blank")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "flashcard",
+                ActivityName = "Flash card từ vựng",
+                IsCompleted = completedActivityIds.Contains("flashcard")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "conversation",
+                ActivityName = "Hội thoại",
+                IsCompleted = completedActivityIds.Contains("conversation")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "reading",
+                ActivityName = "Đọc hiểu",
+                IsCompleted = completedActivityIds.Contains("reading")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "grammar",
+                ActivityName = "Ngữ pháp",
+                IsCompleted = completedActivityIds.Contains("grammar")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "arrange-sentence",
+                ActivityName = "Sắp xếp câu",
+                IsCompleted = completedActivityIds.Contains("arrange-sentence")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "translation",
+                ActivityName = "Bài tập luyện dịch",
+                IsCompleted = completedActivityIds.Contains("translation")
+            },
+            new ActivityProgressDto
+            {
+                ActivityId = "comprehensive-test",
+                ActivityName = "Kiểm tra tổng hợp",
+                IsCompleted = completedActivityIds.Contains("comprehensive-test")
+            }
+        };
+
+        var completedActivities = activities.Count(a => a.IsCompleted);
+        var totalActivities = activities.Count;
+
+        // Tính phần trăm hoàn thành: dựa trên số hoạt động đã hoàn thành
+        var progressPercentage = totalActivities > 0 
+            ? (int)Math.Round((double)completedActivities / totalActivities * 100) 
+            : 0;
+
+        return new PartProgressDto
+        {
+            HskLevel = hskLevel,
+            PartNumber = partNumber,
+            TotalWords = totalWords,
+            MasteredWords = masteredWords,
+            LearningWords = learningWords,
+            NewWords = newWords,
+            CompletedActivities = completedActivities,
+            TotalActivities = totalActivities,
+            ProgressPercentage = progressPercentage,
+            Activities = activities
+        };
+    }
+
+    public async Task<WordWithProgressDto?> GetWordByIdAsync(int wordId, string? userId = null)
+    {
+        var word = await _vocabularyRepository.GetWordByIdAsync(wordId);
+        if (word == null)
+            return null;
+
+        var wordDto = new WordWithProgressDto
+        {
+            Id = word.Id,
+            Character = word.Character,
+            Pinyin = word.Pinyin,
+            Meaning = word.Meaning,
+            AudioUrl = word.AudioUrl,
+            ExampleSentence = word.ExampleSentence,
+            HSKLevel = word.HSKLevel,
+            StrokeCount = word.StrokeCount,
+            Examples = (word.WordExamples ?? new List<WordExample>())
+                .Select(e => new WordExampleDto
+                {
+                    Id = e.Id,
+                    Character = e.Character,
+                    Pinyin = e.Pinyin,
+                    Meaning = e.Meaning,
+                    AudioUrl = e.AudioUrl,
+                    SortOrder = e.SortOrder
+                })
+                .OrderBy(e => e.SortOrder)
+                .ToList()
+        };
+
+        // Lấy progress nếu có userId
+        if (userId != null)
+        {
+            var progress = await _userProgressRepository.GetUserWordProgressAsync(userId, word.Id);
+            if (progress != null)
+            {
+                wordDto.Progress = new UserWordProgressDto
+                {
+                    Id = progress.Id,
+                    Status = progress.Status,
+                    NextReviewDate = progress.NextReviewDate,
+                    ReviewCount = progress.ReviewCount,
+                    CorrectCount = progress.CorrectCount,
+                    WrongCount = progress.WrongCount,
+                    LastReviewedAt = progress.LastReviewedAt
+                };
+            }
+        }
+
+        return wordDto;
     }
 }
 

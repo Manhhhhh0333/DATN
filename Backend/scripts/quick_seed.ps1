@@ -52,5 +52,5 @@ try {
 
 Write-Host ""
 Write-Host "=== HOAN TAT ===" -ForegroundColor Green
-Write-Host "Ban co the truy cap: http://localhost:3000/hsk-vocabulary/1/part/1" -ForegroundColor Cyan
+Write-Host "Ban co the truy cap: http://localhost:3000/courses" -ForegroundColor Cyan
 

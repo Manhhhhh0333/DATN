@@ -299,6 +299,28 @@ export interface ReviewStatsDto {
   wordsDueToday: number;
 }
 
+// Part Progress types
+export interface ActivityProgressDto {
+  activityId: string;
+  activityName: string;
+  isCompleted: boolean;
+  score?: number;
+  completedAt?: string;
+}
+
+export interface PartProgressDto {
+  hskLevel: number;
+  partNumber: number;
+  totalWords: number;
+  masteredWords: number;
+  learningWords: number;
+  newWords: number;
+  completedActivities: number;
+  totalActivities: number;
+  progressPercentage: number;
+  activities: ActivityProgressDto[];
+}
+
 // Lesson Topic types
 export interface LessonTopicDto {
   id: number;
@@ -313,16 +335,19 @@ export interface LessonTopicDto {
   totalExercises: number;
   totalWords: number;
   progressPercentage: number;
+  words?: WordDto[];
 }
 
 export interface LessonTopicListDto {
   id: number;
+  courseId?: number;
   hskLevel?: number;
   title: string;
   description?: string;
   imageUrl?: string;
   topicIndex: number;
   isLocked: boolean;
+  prerequisiteTopicId?: number;
   totalExercises: number;
   totalWords: number;
   progressPercentage: number;

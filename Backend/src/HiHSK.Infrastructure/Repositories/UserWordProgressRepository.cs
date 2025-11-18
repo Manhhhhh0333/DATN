@@ -66,11 +66,13 @@ public class UserWordProgressRepository : IUserWordProgressRepository
             existing.WrongCount = progress.WrongCount;
             existing.LastReviewedAt = progress.LastReviewedAt;
             _context.UserWordProgresses.Update(existing);
+            await _context.SaveChangesAsync();
             return existing;
         }
         else
         {
             _context.UserWordProgresses.Add(progress);
+            await _context.SaveChangesAsync();
             return progress;
         }
     }
@@ -129,6 +131,16 @@ public class UserWordProgressRepository : IUserWordProgressRepository
         }
 
         return await query.CountAsync();
+    }
+
+    public async Task<List<UserWordProgress>> GetUserWordProgressesByWordIdsAsync(string userId, List<int> wordIds)
+    {
+        if (wordIds == null || wordIds.Count == 0)
+            return new List<UserWordProgress>();
+
+        return await _context.UserWordProgresses
+            .Where(uwp => uwp.UserId == userId && wordIds.Contains(uwp.WordId))
+            .ToListAsync();
     }
 }
 

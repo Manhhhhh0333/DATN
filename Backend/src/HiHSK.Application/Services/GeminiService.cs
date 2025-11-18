@@ -101,17 +101,44 @@ public class GeminiService
     /// <summary>
     /// Prompt hướng dẫn AI sinh ví dụ
     /// </summary>
-    private const string SYSTEM_PROMPT = @"Bạn là một gia sư tiếng Trung. Khi nhận được một từ HSK, hãy tạo đúng 3 câu ví dụ (từ dễ đến khó) sử dụng từ đó.
+    private const string SYSTEM_PROMPT = @"Bạn là một gia sư tiếng Trung chuyên nghiệp. Khi nhận được một từ HSK, hãy tạo đúng 3 câu ví dụ (từ dễ đến khó) sử dụng từ đó.
 
-Yêu cầu format trả về (QUAN TRỌNG):
-Mỗi ví dụ trên một dòng, format: [Chữ Hán] ([Pinyin]) - [Nghĩa tiếng Việt]
+YÊU CẦU FORMAT TRẢ VỀ (BẮT BUỘC - PHẢI TUÂN THỦ CHÍNH XÁC):
+Mỗi ví dụ trên một dòng, format: {[Từ vựng]} [Câu ví dụ đầy đủ chứa từ vựng] ([Pinyin của cả câu]) - [Nghĩa tiếng Việt của cả câu]
 
-Ví dụ:
-我有五本书。 (Wǒ yǒu wǔ běn shū.) - Tôi có năm quyển sách.
-商店五点开门。 (Shāngdiàn wǔ diǎn kāimén.) - Cửa hàng mở cửa lúc năm giờ.
-我们还需要五分钟。 (Wǒmen hái xūyào wǔ fēnzhōng.) - Chúng ta còn cần năm phút.
+QUAN TRỌNG VỀ TỪ ĐƠN VÀ CỤM TỪ:
+- Nếu từ vựng là TỪ ĐƠN (1 ký tự): Đảm bảo câu ví dụ sử dụng chính xác từ đơn đó, không dùng từ ghép chứa nó
+  Ví dụ: Nếu từ vựng là ""问"" (hỏi), dùng ""我问老师"" (Tôi hỏi giáo viên), KHÔNG dùng ""问题"" (vấn đề)
+  
+- Nếu từ vựng là CỤM TỪ/TỪ GHÉP (2+ ký tự): Đảm bảo câu ví dụ sử dụng chính xác cụm từ đó
+  Ví dụ: Nếu từ vựng là ""问题"" (vấn đề), dùng ""我有一个问题"" (Tôi có một vấn đề)
 
-Chỉ trả về 3 dòng, mỗi dòng là một ví dụ, không thêm giải thích hay text khác.";
+QUAN TRỌNG:
+- {[Từ vựng]}: Đặt từ vựng được yêu cầu trong dấu ngoặc nhọn {}, tách riêng để dễ nhận diện
+- [Câu ví dụ]: Câu ví dụ đầy đủ, tự nhiên, chứa CHÍNH XÁC từ vựng đó (không dùng từ khác có chứa từ vựng)
+- ([Pinyin]): Pinyin của toàn bộ câu ví dụ, có khoảng trắng giữa các từ
+- [Nghĩa]: Nghĩa tiếng Việt của toàn bộ câu, không chỉ nghĩa của từ vựng
+
+Ví dụ minh họa (từ đơn: 五):
+{五} 我有五本书。 (Wǒ yǒu wǔ běn shū.) - Tôi có năm quyển sách.
+{五} 商店五点开门。 (Shāngdiàn wǔ diǎn kāimén.) - Cửa hàng mở cửa lúc năm giờ.
+{五} 我们还需要五分钟。 (Wǒmen hái xūyào wǔ fēnzhōng.) - Chúng ta còn cần năm phút.
+
+Ví dụ minh họa (từ đơn: 问):
+{问} 我问老师。 (Wǒ wèn lǎoshī.) - Tôi hỏi giáo viên.
+{问} 你问什么？ (Nǐ wèn shénme?) - Bạn hỏi gì?
+{问} 他问我问题。 (Tā wèn wǒ wèntí.) - Anh ấy hỏi tôi vấn đề.
+
+Ví dụ minh họa (cụm từ: 问题):
+{问题} 我有一个问题。 (Wǒ yǒu yī gè wèntí.) - Tôi có một câu hỏi.
+{问题} 这个问题很难。 (Zhège wèntí hěn nán.) - Vấn đề này rất khó.
+{问题} 我们需要解决这个问题。 (Wǒmen xūyào jiějué zhège wèntí.) - Chúng ta cần giải quyết vấn đề này.
+
+LƯU Ý:
+- Chỉ trả về đúng 3 dòng, mỗi dòng là một ví dụ
+- Không thêm giải thích, không thêm text khác
+- Đảm bảo từ vựng trong {} xuất hiện CHÍNH XÁC trong câu ví dụ (không dùng từ khác)
+- Câu ví dụ phải tự nhiên, có nghĩa, phù hợp với ngữ cảnh";
 
     /// <summary>
     /// Sinh 3 ví dụ cho một từ vựng bằng Gemini API
@@ -268,15 +295,22 @@ Chỉ trả về 3 dòng, mỗi dòng là một ví dụ, không thêm giải th
 
         var chineseRegex = new Regex(@"[\u4e00-\u9fa5]+");
 
+        // Format 0 (MỚI - ƯU TIÊN CAO NHẤT): "{Từ vựng} Câu ví dụ (pinyin) - nghĩa"
+        // Ví dụ: "{五} 我有五本书。 (Wǒ yǒu wǔ běn shū.) - Tôi có năm quyển sách."
+        // Hoặc: "{问题} 我有一个问题。 (Wǒ yǒu yī gè wèntí.) - Tôi có một câu hỏi."
+        // Hoặc: "{帮助} 帮助别人是应该的,不用客气 (Bāngzhù biéren shì yīnggāi de, bùyòng kèqì.) - Giúp đỡ..."
+        var format0Regex = new Regex(@"\{([\u4e00-\u9fa5]+)\}\s+([\u4e00-\u9fa5\s，。、？！,\.!?]+)\s*\(([^)]+)\)\s*[-–—:]\s*(.+)");
+
         // Format 1: "Chữ Hán (pinyin) - nghĩa" hoặc "Chữ Hán (pinyin) : nghĩa"
-        var format1Regex = new Regex(@"([\u4e00-\u9fa5\s，。、]+)\s*\(([^)]+)\)\s*[-–—:]\s*(.+)");
+        // Hỗ trợ: dấu phẩy trong câu, dấu chấm trong pinyin, nhiều dấu câu
+        var format1Regex = new Regex(@"([\u4e00-\u9fa5\s，。、？！,\.!?]+)\s*\(([^)]+)\)\s*[-–—:]\s*(.+)");
         
         // Format 2: "(1) Chữ Hán (pinyin) (nghĩa)" - số thứ tự trong ngoặc đơn
         var format2Regex = new Regex(@"\(?\d+\)?\s*([\u4e00-\u9fa5\s，。、]+)\s*\(([^)]+)\)\s*\(([^)]+)\)");
         
         // Format 3: "Chữ Hán。(Pinyin.) Nghĩa" - không có dấu ngoặc cho pinyin
         var format3Regex = new Regex(@"([\u4e00-\u9fa5\s，。、]+)[。.]([A-Za-zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ\s]+)[。.]\s*(.+)");
-        
+
         // Format 4: Nhiều dòng: dòng 1 là chữ Hán, dòng 2 là pinyin, dòng 3 là nghĩa
         // Format 5: "(1) chữ Hán\n(2) pinyin\n(3) nghĩa" trên nhiều dòng
 
@@ -292,12 +326,46 @@ Chỉ trả về 3 dòng, mỗi dòng là một ví dụ, không thêm giải th
                 continue;
             }
 
+            // Format 0 (MỚI - ƯU TIÊN CAO NHẤT): "{Từ vựng} Câu ví dụ (pinyin) - nghĩa"
+            // Ví dụ: "{帮助} 帮助别人是应该的,不用客气 (Bāngzhù biéren shì yīnggāi de, bùyòng kèqì.) - Giúp đỡ..."
+            var match0 = format0Regex.Match(line);
+            if (match0.Success)
+            {
+                var keyword = match0.Groups[1].Value.Trim(); // Từ vựng trong {}
+                var character = match0.Groups[2].Value.Trim();
+                // Loại bỏ các dấu câu ở cuối câu (nhưng giữ dấu phẩy trong câu)
+                character = character.TrimEnd('。', '.', '？', '！', '?', '!');
+                var pinyin = match0.Groups[3].Value.Trim();
+                // Loại bỏ dấu chấm ở cuối pinyin nếu có
+                pinyin = pinyin.TrimEnd('.', '。');
+                var meaning = match0.Groups[4].Value.Trim(); // Nghĩa của cả câu
+                
+                // Validate: câu ví dụ phải chứa từ vựng (có thể là từ ghép)
+                if (!string.IsNullOrWhiteSpace(character) && !string.IsNullOrWhiteSpace(pinyin) && character.Contains(keyword))
+                {
+                    examples.Add(new WordExampleDto
+                    {
+                        Character = character, // Lưu cả câu ví dụ (không bao gồm {keyword})
+                        Pinyin = pinyin,
+                        Meaning = meaning,
+                        SortOrder = examples.Count + 1
+                    });
+                    i++;
+                    continue;
+                }
+            }
+
             // Format 1: "Chữ Hán (pinyin) - nghĩa"
+            // Ví dụ: "帮助别人是应该的,不用客气 (Bāngzhù biéren shì yīnggāi de, bùyòng kèqì.) - Giúp đỡ người khác..."
             var match1 = format1Regex.Match(line);
             if (match1.Success)
             {
-                var character = match1.Groups[1].Value.Trim().TrimEnd('。', '.');
+                var character = match1.Groups[1].Value.Trim();
+                // Loại bỏ các dấu câu ở cuối câu (nhưng giữ dấu phẩy trong câu)
+                character = character.TrimEnd('。', '.', '？', '！', '?', '!');
                 var pinyin = match1.Groups[2].Value.Trim();
+                // Loại bỏ dấu chấm ở cuối pinyin nếu có
+                pinyin = pinyin.TrimEnd('.', '。');
                 var meaning = match1.Groups[3].Value.Trim();
                 
                 if (!string.IsNullOrWhiteSpace(character) && !string.IsNullOrWhiteSpace(pinyin))
@@ -499,21 +567,22 @@ Chỉ trả về 3 dòng, mỗi dòng là một ví dụ, không thêm giải th
     /// </summary>
     public async Task<WordInfoDto> GenerateWordInfoAsync(string character)
     {
-        var prompt = $@"Bạn là một gia sư tiếng Trung chuyên nghiệp. Khi nhận được một ký tự Hán, hãy cung cấp thông tin đầy đủ về từ đó.
+        var prompt = $@"Bạn là một gia sư tiếng Trung. Khi nhận được một từ tiếng Trung, hãy cung cấp thông tin về từ đó.
 
-Yêu cầu format trả về (QUAN TRỌNG):
-Dòng 1: PINYIN - chỉ pinyin của từ, không có dấu ngoặc hay text khác
-Dòng 2: NGHĨA - nghĩa tiếng Việt của từ, ngắn gọn
-Dòng 3-5: 3 câu ví dụ, mỗi câu một dòng, format: [Chữ Hán] ([Pinyin]) - [Nghĩa tiếng Việt]
+Trả về CHÍNH XÁC theo format (không thêm text khác):
+Dòng 1: Chỉ pinyin của từ (ví dụ: gēn)
+Dòng 2: Chỉ nghĩa tiếng Việt (ví dụ: theo, với, cùng)
+Dòng 3: Câu ví dụ 1, format: [Chữ Hán] ([Pinyin]) - [Nghĩa]
+Dòng 4: Câu ví dụ 2 (tùy chọn)
+Dòng 5: Câu ví dụ 3 (tùy chọn)
 
-Ví dụ output:
+Ví dụ:
 wèn
-hỏi, thăm hỏi
+hỏi
 你问什么？ (Nǐ wèn shénme?) - Bạn hỏi gì?
-我问老师一个问题。 (Wǒ wèn lǎoshī yígè wèntí.) - Tôi hỏi giáo viên một câu hỏi.
-他问我今天怎么样。 (Tā wèn wǒ jīntiān zěnmeyàng.) - Anh ấy hỏi tôi hôm nay thế nào.
+我问老师。 (Wǒ wèn lǎoshī.) - Tôi hỏi giáo viên.
 
-Ký tự Hán: {character}";
+Từ cần tra: {character}";
 
         var requestBody = new
         {
@@ -647,15 +716,22 @@ Ký tự Hán: {character}";
     {
         try
         {
-            Console.WriteLine($"[GeminiService] Parsing response text (length: {responseText?.Length ?? 0}):");
-            Console.WriteLine($"[GeminiService] Response preview: {responseText?.Substring(0, Math.Min(500, responseText?.Length ?? 0))}");
+            Console.WriteLine($"[GeminiService] Parsing response text (length: {responseText?.Length ?? 0})");
+            Console.WriteLine($"[GeminiService] Full response:\n{responseText}");
 
             var lines = responseText.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(l => l.Trim())
-                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Where(l => !string.IsNullOrWhiteSpace(l) && 
+                            !l.StartsWith("```") && 
+                            !l.ToLower().Contains("ví dụ") &&
+                            !l.ToLower().Contains("format"))
                 .ToList();
 
-            Console.WriteLine($"[GeminiService] Parsed {lines.Count} lines");
+            Console.WriteLine($"[GeminiService] Filtered to {lines.Count} lines");
+            for (int j = 0; j < Math.Min(lines.Count, 10); j++)
+            {
+                Console.WriteLine($"[GeminiService] Line {j}: {lines[j]}");
+            }
 
             if (lines.Count < 2)
             {
@@ -663,30 +739,68 @@ Ký tự Hán: {character}";
                 return null;
             }
 
-            // Dòng 1: Pinyin
+            // Dòng 1: Pinyin - bỏ qua các dòng label
             var pinyin = lines[0].Trim();
-            Console.WriteLine($"[GeminiService] Pinyin: {pinyin}");
+            if (pinyin.ToLower().Contains("pinyin") || pinyin.ToLower().Contains("dòng"))
+            {
+                pinyin = lines.Count > 1 ? lines[1].Trim() : "";
+                lines.RemoveAt(0);
+            }
+            
+            // Validate pinyin (chỉ chứa chữ cái latin và dấu thanh)
+            if (!Regex.IsMatch(pinyin, @"^[A-Za-zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ\s]+$"))
+            {
+                Console.WriteLine($"[GeminiService] ⚠️ Pinyin không hợp lệ: '{pinyin}', thử dòng tiếp");
+                if (lines.Count > 1)
+                {
+                    pinyin = lines[1].Trim();
+                    lines.RemoveAt(0);
+                }
+            }
+            
+            Console.WriteLine($"[GeminiService] Pinyin: '{pinyin}'");
 
-            // Dòng 2: Meaning
-            var meaning = lines[1].Trim();
-            Console.WriteLine($"[GeminiService] Meaning: {meaning}");
+            // Dòng 2: Meaning - bỏ qua các dòng label
+            var meaning = lines.Count > 1 ? lines[1].Trim() : "";
+            if (meaning.ToLower().Contains("nghĩa") || meaning.ToLower().Contains("dòng"))
+            {
+                meaning = lines.Count > 2 ? lines[2].Trim() : "";
+                lines.RemoveAt(1);
+            }
+            
+            Console.WriteLine($"[GeminiService] Meaning: '{meaning}'");
 
-            // Dòng 3-5: Examples
+            // Validate pinyin và meaning
+            if (string.IsNullOrWhiteSpace(pinyin) || string.IsNullOrWhiteSpace(meaning))
+            {
+                Console.WriteLine($"[GeminiService] ⚠️ Pinyin hoặc Meaning bị rỗng");
+                return null;
+            }
+
+            // Dòng 3+: Examples (tùy chọn)
             var examples = new List<WordExampleDto>();
-            var format1Regex = new Regex(@"([\u4e00-\u9fa5\s，。、]+)\s*\(([^)]+)\)\s*[-–—:]\s*(.+)");
+            var chineseRegex = new Regex(@"[\u4e00-\u9fa5]+");
+            var format1Regex = new Regex(@"([\u4e00-\u9fa5\s，。、？！]+)\s*\(([^)]+)\)\s*[-–—:]\s*(.+)");
 
             for (int i = 2; i < lines.Count && examples.Count < 3; i++)
             {
                 var line = lines[i];
-                Console.WriteLine($"[GeminiService] Parsing example line {i}: {line}");
+                
+                // Bỏ qua dòng không có chữ Hán
+                if (!chineseRegex.IsMatch(line))
+                {
+                    Console.WriteLine($"[GeminiService] Skip line {i} (no Chinese): {line}");
+                    continue;
+                }
+
                 var match = format1Regex.Match(line);
                 if (match.Success)
                 {
-                    var character = match.Groups[1].Value.Trim().TrimEnd('。', '.');
+                    var character = match.Groups[1].Value.Trim().TrimEnd('。', '.', '？', '！', '?', '!');
                     var examplePinyin = match.Groups[2].Value.Trim();
                     var exampleMeaning = match.Groups[3].Value.Trim();
 
-                    Console.WriteLine($"[GeminiService] Matched example: Character={character}, Pinyin={examplePinyin}, Meaning={exampleMeaning}");
+                    Console.WriteLine($"[GeminiService] Matched example {examples.Count + 1}: Character='{character}', Pinyin='{examplePinyin}', Meaning='{exampleMeaning}'");
 
                     if (!string.IsNullOrWhiteSpace(character) && !string.IsNullOrWhiteSpace(examplePinyin))
                     {
@@ -698,24 +812,20 @@ Ký tự Hán: {character}";
                             SortOrder = examples.Count + 1
                         });
                     }
-                    else
-                    {
-                        Console.WriteLine($"[GeminiService] ⚠️ Example bị bỏ qua vì thiếu character hoặc pinyin");
-                    }
                 }
                 else
                 {
-                    Console.WriteLine($"[GeminiService] ⚠️ Không match regex cho dòng: {line}");
+                    Console.WriteLine($"[GeminiService] No match for line {i}: {line}");
                 }
             }
 
-            Console.WriteLine($"[GeminiService] ✅ Parsed {examples.Count} examples");
+            Console.WriteLine($"[GeminiService] ✅ Parsed successfully: Pinyin='{pinyin}', Meaning='{meaning}', Examples={examples.Count}");
 
             return new WordInfoDto
             {
                 Pinyin = pinyin,
                 Meaning = meaning,
-                Examples = examples
+                Examples = examples  // Có thể rỗng, không sao
             };
         }
         catch (Exception ex)

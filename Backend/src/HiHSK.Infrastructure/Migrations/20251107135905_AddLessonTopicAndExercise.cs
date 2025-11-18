@@ -206,95 +206,119 @@ namespace HiHSK.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Xóa foreign keys
-            migrationBuilder.DropForeignKey(
-                name: "FK_SentencePatterns_LessonExercises_ExerciseId",
-                table: "SentencePatterns");
+            // Xóa foreign keys (kiểm tra tồn tại trước khi drop)
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_SentencePatterns_LessonExercises_ExerciseId')
+                    ALTER TABLE [SentencePatterns] DROP CONSTRAINT [FK_SentencePatterns_LessonExercises_ExerciseId];
+            ");
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_ReadingPassages_LessonExercises_ExerciseId",
-                table: "ReadingPassages");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_ReadingPassages_LessonExercises_ExerciseId')
+                    ALTER TABLE [ReadingPassages] DROP CONSTRAINT [FK_ReadingPassages_LessonExercises_ExerciseId];
+            ");
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_Dialogues_LessonExercises_ExerciseId",
-                table: "Dialogues");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Dialogues_LessonExercises_ExerciseId')
+                    ALTER TABLE [Dialogues] DROP CONSTRAINT [FK_Dialogues_LessonExercises_ExerciseId];
+            ");
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_Questions_LessonExercises_ExerciseId",
-                table: "Questions");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Questions_LessonExercises_ExerciseId')
+                    ALTER TABLE [Questions] DROP CONSTRAINT [FK_Questions_LessonExercises_ExerciseId];
+            ");
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_Words_LessonTopics_TopicId",
-                table: "Words");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Words_LessonTopics_TopicId')
+                    ALTER TABLE [Words] DROP CONSTRAINT [FK_Words_LessonTopics_TopicId];
+            ");
 
-            // Xóa indexes
-            migrationBuilder.DropIndex(
-                name: "IX_SentencePatterns_ExerciseId",
-                table: "SentencePatterns");
+            // Xóa indexes (kiểm tra tồn tại trước khi drop)
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_SentencePatterns_ExerciseId' AND object_id = OBJECT_ID('SentencePatterns'))
+                    DROP INDEX [IX_SentencePatterns_ExerciseId] ON [SentencePatterns];
+            ");
 
-            migrationBuilder.DropIndex(
-                name: "IX_ReadingPassages_ExerciseId",
-                table: "ReadingPassages");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ReadingPassages_ExerciseId' AND object_id = OBJECT_ID('ReadingPassages'))
+                    DROP INDEX [IX_ReadingPassages_ExerciseId] ON [ReadingPassages];
+            ");
 
-            migrationBuilder.DropIndex(
-                name: "IX_Dialogues_ExerciseId",
-                table: "Dialogues");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Dialogues_ExerciseId' AND object_id = OBJECT_ID('Dialogues'))
+                    DROP INDEX [IX_Dialogues_ExerciseId] ON [Dialogues];
+            ");
 
-            migrationBuilder.DropIndex(
-                name: "IX_Questions_ExerciseId",
-                table: "Questions");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Questions_ExerciseId' AND object_id = OBJECT_ID('Questions'))
+                    DROP INDEX [IX_Questions_ExerciseId] ON [Questions];
+            ");
 
-            migrationBuilder.DropIndex(
-                name: "IX_Words_TopicId",
-                table: "Words");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Words_TopicId' AND object_id = OBJECT_ID('Words'))
+                    DROP INDEX [IX_Words_TopicId] ON [Words];
+            ");
 
-            migrationBuilder.DropIndex(
-                name: "IX_LessonExercises_PrerequisiteExerciseId",
-                table: "LessonExercises");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_LessonExercises_PrerequisiteExerciseId' AND object_id = OBJECT_ID('LessonExercises'))
+                    DROP INDEX [IX_LessonExercises_PrerequisiteExerciseId] ON [LessonExercises];
+            ");
 
-            migrationBuilder.DropIndex(
-                name: "IX_LessonExercises_TopicId_ExerciseIndex",
-                table: "LessonExercises");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_LessonExercises_TopicId_ExerciseIndex' AND object_id = OBJECT_ID('LessonExercises'))
+                    DROP INDEX [IX_LessonExercises_TopicId_ExerciseIndex] ON [LessonExercises];
+            ");
 
-            migrationBuilder.DropIndex(
-                name: "IX_LessonTopics_PrerequisiteTopicId",
-                table: "LessonTopics");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_LessonTopics_PrerequisiteTopicId' AND object_id = OBJECT_ID('LessonTopics'))
+                    DROP INDEX [IX_LessonTopics_PrerequisiteTopicId] ON [LessonTopics];
+            ");
 
-            migrationBuilder.DropIndex(
-                name: "IX_LessonTopics_HSKLevel_TopicIndex",
-                table: "LessonTopics");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_LessonTopics_HSKLevel_TopicIndex' AND object_id = OBJECT_ID('LessonTopics'))
+                    DROP INDEX [IX_LessonTopics_HSKLevel_TopicIndex] ON [LessonTopics];
+            ");
 
-            migrationBuilder.DropIndex(
-                name: "IX_LessonTopics_CourseId",
-                table: "LessonTopics");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_LessonTopics_CourseId' AND object_id = OBJECT_ID('LessonTopics'))
+                    DROP INDEX [IX_LessonTopics_CourseId] ON [LessonTopics];
+            ");
 
-            // Xóa cột
-            migrationBuilder.DropColumn(
-                name: "ExerciseId",
-                table: "SentencePatterns");
+            // Xóa cột (kiểm tra tồn tại trước khi drop)
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'SentencePatterns' AND COLUMN_NAME = 'ExerciseId')
+                    ALTER TABLE [SentencePatterns] DROP COLUMN [ExerciseId];
+            ");
 
-            migrationBuilder.DropColumn(
-                name: "ExerciseId",
-                table: "ReadingPassages");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'ReadingPassages' AND COLUMN_NAME = 'ExerciseId')
+                    ALTER TABLE [ReadingPassages] DROP COLUMN [ExerciseId];
+            ");
 
-            migrationBuilder.DropColumn(
-                name: "ExerciseId",
-                table: "Dialogues");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Dialogues' AND COLUMN_NAME = 'ExerciseId')
+                    ALTER TABLE [Dialogues] DROP COLUMN [ExerciseId];
+            ");
 
-            migrationBuilder.DropColumn(
-                name: "ExerciseId",
-                table: "Questions");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Questions' AND COLUMN_NAME = 'ExerciseId')
+                    ALTER TABLE [Questions] DROP COLUMN [ExerciseId];
+            ");
 
-            migrationBuilder.DropColumn(
-                name: "TopicId",
-                table: "Words");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Words' AND COLUMN_NAME = 'TopicId')
+                    ALTER TABLE [Words] DROP COLUMN [TopicId];
+            ");
 
-            // Xóa bảng
-            migrationBuilder.DropTable(
-                name: "LessonExercises");
+            // Xóa bảng (kiểm tra tồn tại trước khi drop)
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'LessonExercises')
+                    DROP TABLE [LessonExercises];
+            ");
 
-            migrationBuilder.DropTable(
-                name: "LessonTopics");
+            migrationBuilder.Sql(@"
+                IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'LessonTopics')
+                    DROP TABLE [LessonTopics];
+            ");
         }
     }
 }

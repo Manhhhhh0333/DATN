@@ -9,7 +9,7 @@ interface TopicCardProps {
 
 export default function TopicCard({ topic }: TopicCardProps) {
   return (
-    <Link href={`/vocabulary/${topic.id}`}>
+    <Link href={`/topics/${topic.id}`}>
       <div className="bg-white rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">

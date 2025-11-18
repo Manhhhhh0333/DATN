@@ -74,7 +74,7 @@ try {
     Write-Host ""
     Write-Host "Bạn có thể kiểm tra dữ liệu bằng cách:" -ForegroundColor Yellow
     Write-Host "  1. Mở trang: http://localhost:3000/courses" -ForegroundColor White
-    Write-Host "  2. Mở trang: http://localhost:3000/hsk-vocabulary/1/part/1" -ForegroundColor White
+    Write-Host "  2. Mở trang: http://localhost:3000/courses" -ForegroundColor White
     Write-Host "  3. Gọi API: $apiBaseUrl/api/admin/stats" -ForegroundColor White
     
 } catch {

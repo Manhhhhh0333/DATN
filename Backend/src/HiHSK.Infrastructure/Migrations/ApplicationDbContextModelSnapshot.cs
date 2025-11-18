@@ -1149,6 +1149,73 @@ namespace HiHSK.Infrastructure.Migrations
                     b.ToTable("TranslationHistories");
                 });
 
+            modelBuilder.Entity("HiHSK.Domain.Entities.UserActivityProgress", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ActivityId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETDATE()");
+
+                    b.Property<int?>("HskLevel")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsCompleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<int?>("PartNumber")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("Score")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("TopicId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("GETDATE()");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TopicId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("HskLevel", "PartNumber");
+
+                    b.HasIndex("UserId", "TopicId", "ActivityId")
+                        .IsUnique()
+                        .HasFilter("[TopicId] IS NOT NULL");
+
+                    b.HasIndex("UserId", "HskLevel", "PartNumber", "ActivityId")
+                        .IsUnique()
+                        .HasFilter("[HskLevel] IS NOT NULL AND [PartNumber] IS NOT NULL");
+
+                    b.ToTable("UserActivityProgresses");
+                });
+
             modelBuilder.Entity("HiHSK.Domain.Entities.UserAnswer", b =>
                 {
                     b.Property<int>("Id")
@@ -2712,16 +2779,14 @@ namespace HiHSK.Infrastructure.Migrations
 
             modelBuilder.Entity("HiHSK.Domain.Entities.Word", b =>
                 {
-                    b.HasOne("HiHSK.Domain.Entities.Lesson", "Lesson")
+                    b.HasOne("HiHSK.Domain.Entities.Lesson", null)
                         .WithMany("Words")
-                        .HasForeignKey("LessonId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("LessonId");
 
                     b.HasOne("HiHSK.Domain.Entities.LessonTopic", "Topic")
                         .WithMany("Words")
-                        .HasForeignKey("TopicId");
-
-                    b.Navigation("Lesson");
+                        .HasForeignKey("TopicId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Topic");
                 });

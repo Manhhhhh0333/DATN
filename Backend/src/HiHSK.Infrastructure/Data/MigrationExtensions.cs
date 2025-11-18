@@ -30,17 +30,22 @@ public static class MigrationExtensions
             return;
         }
 
-        // Seed CourseCategories
+        // Seed CourseCategories (với IDENTITY_INSERT để đảm bảo Id đúng)
         foreach (var category in seedData.CourseCategories)
         {
             migrationBuilder.Sql($@"
-                IF NOT EXISTS (SELECT 1 FROM CourseCategories WHERE Name = '{EscapeSql(category.Name)}')
-                INSERT INTO CourseCategories (Name, DisplayName, Description, IconUrl, SortOrder)
-                VALUES ('{EscapeSql(category.Name)}', 
-                        N'{EscapeSql(category.DisplayName ?? "")}', 
-                        N'{EscapeSql(category.Description ?? "")}', 
-                        {(category.IconUrl != null ? $"N'{EscapeSql(category.IconUrl)}'" : "NULL")}, 
-                        {category.SortOrder})
+                IF NOT EXISTS (SELECT 1 FROM CourseCategories WHERE Id = {category.Id})
+                BEGIN
+                    SET IDENTITY_INSERT [CourseCategories] ON;
+                    INSERT INTO [CourseCategories] (Id, Name, DisplayName, Description, IconUrl, SortOrder)
+                    VALUES ({category.Id}, 
+                            N'{EscapeSql(category.Name)}', 
+                            N'{EscapeSql(category.DisplayName ?? "")}', 
+                            N'{EscapeSql(category.Description ?? "")}', 
+                            {(category.IconUrl != null ? $"N'{EscapeSql(category.IconUrl)}'" : "NULL")}, 
+                            {category.SortOrder});
+                    SET IDENTITY_INSERT [CourseCategories] OFF;
+                END
             ");
         }
 
@@ -83,42 +88,48 @@ public static class MigrationExtensions
             }
         }
 
-        // Seed Words - Map lessonId từ lessonIndex (nếu có lessons) hoặc NULL nếu không có
+        // Seed Words - Sử dụng dynamic SQL để tránh SQL Server validate syntax khi cột TopicId chưa tồn tại
         foreach (var word in seedData.Words)
         {
-            string lessonIdSql;
-            if (word.LessonId.HasValue && seedData.Lessons != null && seedData.Lessons.Count > 0)
-            {
-                // Có lessonId và có lessons trong JSON - map từ lessonIndex
-                lessonIdSql = $"(SELECT Id FROM Lessons WHERE LessonIndex = {word.LessonId.Value} AND CourseId = 1)";
-            }
-            else
-            {
-                // Không có lessonId hoặc không có lessons - set NULL
-                lessonIdSql = "NULL";
-            }
+            string charEscaped = EscapeSql(word.Character ?? "").Replace("'", "''");
+            string pinyinEscaped = EscapeSql(word.Pinyin ?? "").Replace("'", "''");
+            string meaningEscaped = EscapeSql(word.Meaning ?? "").Replace("'", "''");
+            string audioUrlValue = word.AudioUrl != null ? $"N'{EscapeSql(word.AudioUrl).Replace("'", "''")}'" : "NULL";
+            string exampleValue = word.ExampleSentence != null ? $"N'{EscapeSql(word.ExampleSentence).Replace("'", "''")}'" : "NULL";
+
+            string insertWithTopicId = $"INSERT INTO Words (TopicId, Character, Pinyin, Meaning, AudioUrl, ExampleSentence, HSKLevel, Frequency, StrokeCount, CreatedAt) VALUES (NULL, N'{charEscaped}', N'{pinyinEscaped}', N'{meaningEscaped}', {audioUrlValue}, {exampleValue}, {word.HSKLevel ?? 1}, {word.Frequency ?? 50}, {word.StrokeCount ?? 7}, GETDATE())";
+            string insertWithoutTopicId = $"INSERT INTO Words (Character, Pinyin, Meaning, AudioUrl, ExampleSentence, HSKLevel, Frequency, StrokeCount, CreatedAt) VALUES (N'{charEscaped}', N'{pinyinEscaped}', N'{meaningEscaped}', {audioUrlValue}, {exampleValue}, {word.HSKLevel ?? 1}, {word.Frequency ?? 50}, {word.StrokeCount ?? 7}, GETDATE())";
+
+            string insertWithTopicIdEscaped = insertWithTopicId.Replace("'", "''");
+            string insertWithoutTopicIdEscaped = insertWithoutTopicId.Replace("'", "''");
 
             migrationBuilder.Sql($@"
                 IF NOT EXISTS (SELECT 1 FROM Words WHERE Character = N'{EscapeSql(word.Character ?? "")}' AND Pinyin = N'{EscapeSql(word.Pinyin ?? "")}')
-                INSERT INTO Words (LessonId, Character, Pinyin, Meaning, AudioUrl, ExampleSentence, HSKLevel, Frequency, StrokeCount, CreatedAt)
-                VALUES ({lessonIdSql}, 
-                        N'{EscapeSql(word.Character ?? "")}', 
-                        N'{EscapeSql(word.Pinyin ?? "")}', 
-                        N'{EscapeSql(word.Meaning ?? "")}', 
-                        {(word.AudioUrl != null ? $"N'{EscapeSql(word.AudioUrl)}'" : "NULL")}, 
-                        {(word.ExampleSentence != null ? $"N'{EscapeSql(word.ExampleSentence)}'" : "NULL")}, 
-                        {word.HSKLevel ?? 1}, 
-                        {word.Frequency ?? 50}, 
-                        {word.StrokeCount ?? 7}, 
-                        GETDATE())
+                BEGIN
+                    DECLARE @sql NVARCHAR(MAX);
+                    IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Words' AND COLUMN_NAME = 'TopicId')
+                    BEGIN
+                        SET @sql = N'{insertWithTopicIdEscaped}';
+                        EXEC sp_executesql @sql;
+                    END
+                    ELSE
+                    BEGIN
+                        SET @sql = N'{insertWithoutTopicIdEscaped}';
+                        EXEC sp_executesql @sql;
+                    END
+                END
             ");
         }
 
         // Seed VocabularyTopic cho HSK1 (Id=1)
         migrationBuilder.Sql(@"
             IF NOT EXISTS (SELECT 1 FROM VocabularyTopics WHERE Id = 1)
-            INSERT INTO VocabularyTopics (Id, Name, Description, ImageUrl, SortOrder)
-            VALUES (1, N'HSK 1', N'Từ vựng HSK Cấp độ 1 - 150 từ vựng cơ bản', NULL, 1)
+            BEGIN
+                SET IDENTITY_INSERT [VocabularyTopics] ON;
+                INSERT INTO [VocabularyTopics] (Id, Name, Description, ImageUrl, SortOrder)
+                VALUES (1, N'HSK 1', N'Từ vựng HSK Cấp độ 1 - 150 từ vựng cơ bản', NULL, 1);
+                SET IDENTITY_INSERT [VocabularyTopics] OFF;
+            END
         ");
 
         // Seed WordVocabularyTopics - Gán tất cả từ vựng HSK1 vào Vocabulary Topic HSK1

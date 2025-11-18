@@ -11,6 +11,13 @@ public interface IVocabularyService
     Task<ReviewStatsDto> GetOverallStatsAsync(string userId);
     Task<List<WordWithProgressDto>> GetWordsByHSKLevelAndPartAsync(int hskLevel, int partNumber, string? userId = null);
     Task<WordWithProgressDto> GetOrCreateWordByCharacterAsync(string character, string? userId = null);
-    Task<Dictionary<string, WordWithProgressDto>> GetOrCreateWordsBatchAsync(List<string> characters, string? userId = null);
+    Task<Dictionary<string, WordWithProgressDto>> GetOrCreateWordsBatchAsync(
+        List<string> characters, 
+        string? userId = null,
+        int batchSize = 5,
+        int maxRetries = 2,
+        int delayBetweenBatchesMs = 500);
+    Task<PartProgressDto> GetPartProgressAsync(int hskLevel, int partNumber, string userId);
+    Task<WordWithProgressDto?> GetWordByIdAsync(int wordId, string? userId = null);
 }
 

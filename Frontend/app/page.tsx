@@ -338,7 +338,7 @@ export default function Home() {
                 {topics.map((topic) => (
                   <Link
                     key={topic.id}
-                    href={`/vocabulary/${topic.id}`}
+                    href={`/topics/${topic.id}`}
                     className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 border border-gray-100"
                   >
                     <h3 className="text-xl font-bold text-dark mb-2">{topic.name}</h3>
@@ -438,9 +438,9 @@ export default function Home() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {hskLevels.map((hsk, index) => {
-                  // Link đến vocabulary cho HSK1, courses cho các level khác
+                  // Link đến topics cho HSK1, courses cho các level khác
                   const hskLevel = index + 1; // HSK 1 = index 0 + 1
-                  const linkUrl = hskLevel === 1 ? `/vocabulary/1` : `/courses`;
+                  const linkUrl = hskLevel === 1 ? `/topics/1` : `/courses`;
                   
                   return (
                     <Link

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { WordDto } from "@/types";
 import { getProxyAudioUrl } from "@/lib/audio";
 
@@ -79,25 +80,57 @@ export default function WordCard({ word }: WordCardProps) {
         </p>
       </div>
 
-      {/* Example Sentence */}
-      {word.exampleSentence && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
-          <p className="text-gray-600 text-sm font-medium mb-2">Ví dụ:</p>
-          <p className="text-gray-800 leading-relaxed">{word.exampleSentence}</p>
-        </div>
-      )}
-
-      {/* Footer: Stroke Count */}
-      {word.strokeCount && (
-        <div className="mt-4 pt-3 border-t border-gray-100">
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-            <span>Số nét: {word.strokeCount}</span>
+      {/* Examples Section - Luôn hiển thị */}
+      <div className="mt-4 pt-4 border-t border-gray-200">
+        <p className="text-gray-600 text-sm font-medium mb-3">Ví dụ:</p>
+        
+        {/* Hiển thị examples nếu có */}
+        {word.examples && word.examples.length > 0 ? (
+          <div className="space-y-3">
+            {word.examples.map((example, index) => (
+              <div key={example.id || index} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                <p className="text-sm font-medium text-gray-900 mb-1">
+                  {example.character}
+                </p>
+                <p className="text-xs text-blue-600 mb-1">{example.pinyin}</p>
+                <p className="text-xs text-gray-600">{example.meaning}</p>
+              </div>
+            ))}
           </div>
+        ) : (
+          /* Fallback: hiển thị exampleSentence nếu không có examples */
+          word.exampleSentence ? (
+            <p className="text-gray-800 leading-relaxed text-sm">{word.exampleSentence}</p>
+          ) : (
+            <p className="text-gray-500 text-xs">Chưa có ví dụ cho từ này.</p>
+          )
+        )}
+      </div>
+
+      {/* Footer: Stroke Count and Detail Button */}
+      <div className="mt-4 pt-3 border-t border-gray-100">
+        <div className="flex items-center justify-between">
+          {word.strokeCount && (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+              <span>Số nét: {word.strokeCount}</span>
+            </div>
+          )}
+          {(word.character || word.id) && (
+            <Link
+              href={`/words/${word.id ? word.id : encodeURIComponent(word.character || "")}`}
+              className="flex items-center justify-center gap-2 px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-xs font-medium"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Chi tiết
+            </Link>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

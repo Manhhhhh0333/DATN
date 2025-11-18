@@ -55,8 +55,7 @@ public class VocabularyRepository : IVocabularyRepository
                     StrokeCount = w.StrokeCount,
                     Frequency = w.Frequency,
                     CreatedAt = w.CreatedAt,
-                    // Không select LessonId và TopicId
-                    LessonId = null,
+                    // Không select TopicId để tránh load navigation property
                     TopicId = null
                 })
                 .OrderBy(w => w.Id) // Sắp xếp theo ID
@@ -93,7 +92,6 @@ public class VocabularyRepository : IVocabularyRepository
                 ExampleSentence = w.ExampleSentence,
                 HSKLevel = w.HSKLevel,
                 StrokeCount = w.StrokeCount,
-                LessonId = w.LessonId,
                 Frequency = w.Frequency,
                 CreatedAt = w.CreatedAt
             })
@@ -130,8 +128,7 @@ public class VocabularyRepository : IVocabularyRepository
                     HSKLevel = w.HSKLevel,
                     StrokeCount = w.StrokeCount,
                     Frequency = w.Frequency,
-                    CreatedAt = w.CreatedAt,
-                    LessonId = w.LessonId
+                    CreatedAt = w.CreatedAt
                 })
                 .ToListAsync();
 
@@ -207,8 +204,7 @@ public class VocabularyRepository : IVocabularyRepository
                     HSKLevel = w.HSKLevel,
                     StrokeCount = w.StrokeCount,
                     Frequency = w.Frequency,
-                    CreatedAt = w.CreatedAt,
-                    LessonId = w.LessonId
+                    CreatedAt = w.CreatedAt
                 })
                 .FirstOrDefaultAsync();
 
@@ -229,8 +225,7 @@ public class VocabularyRepository : IVocabularyRepository
                         HSKLevel = w.HSKLevel,
                         StrokeCount = w.StrokeCount,
                         Frequency = w.Frequency,
-                        CreatedAt = w.CreatedAt,
-                        LessonId = w.LessonId
+                        CreatedAt = w.CreatedAt
                     })
                     .FirstOrDefaultAsync();
             }
@@ -266,8 +261,45 @@ public class VocabularyRepository : IVocabularyRepository
         try
         {
             var word = await _context.Words
-                .Include(w => w.WordExamples)
-                .FirstOrDefaultAsync(w => w.Id == wordId);
+                .AsNoTracking()
+                .Where(w => w.Id == wordId)
+                .Select(w => new Word
+                {
+                    Id = w.Id,
+                    TopicId = w.TopicId,
+                    Character = w.Character,
+                    Pinyin = w.Pinyin,
+                    Meaning = w.Meaning,
+                    AudioUrl = w.AudioUrl,
+                    ExampleSentence = w.ExampleSentence,
+                    HSKLevel = w.HSKLevel,
+                    Frequency = w.Frequency,
+                    StrokeCount = w.StrokeCount,
+                    CreatedAt = w.CreatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (word != null)
+            {
+                var examples = await _context.WordExamples
+                    .AsNoTracking()
+                    .Where(e => e.WordId == wordId)
+                    .OrderBy(e => e.SortOrder)
+                    .Select(e => new WordExample
+                    {
+                        Id = e.Id,
+                        WordId = e.WordId,
+                        Character = e.Character,
+                        Pinyin = e.Pinyin,
+                        Meaning = e.Meaning,
+                        AudioUrl = e.AudioUrl,
+                        SortOrder = e.SortOrder
+                    })
+                    .ToListAsync();
+                
+                word.WordExamples = examples;
+            }
+
             return word;
         }
         catch (Exception ex)
@@ -283,12 +315,111 @@ public class VocabularyRepository : IVocabularyRepository
         {
             Console.WriteLine($"[VocabularyRepository] Bắt đầu lưu từ mới: Character='{word.Character}', Pinyin='{word.Pinyin}', Meaning='{word.Meaning}'");
 
-            // Lưu Word (không lưu WordExamples ở đây)
-            _context.Words.Add(word);
-            await _context.SaveChangesAsync();
-            Console.WriteLine($"[VocabularyRepository] Đã lưu Word với Id={word.Id}");
+            // Validate và truncate nếu cần
+            var character = (word.Character ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(character))
+            {
+                throw new ArgumentException("Character không được để trống");
+            }
+            if (character.Length > 50)
+            {
+                character = character.Substring(0, 50);
+                Console.WriteLine($"[VocabularyRepository] ⚠️ Character bị cắt xuống 50 ký tự: '{character}'");
+            }
 
-            return word;
+            var pinyin = (word.Pinyin ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(pinyin))
+            {
+                throw new ArgumentException("Pinyin không được để trống");
+            }
+            if (pinyin.Length > 100)
+            {
+                pinyin = pinyin.Substring(0, 100);
+                Console.WriteLine($"[VocabularyRepository] ⚠️ Pinyin bị cắt xuống 100 ký tự: '{pinyin}'");
+            }
+
+            var meaning = (word.Meaning ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(meaning))
+            {
+                throw new ArgumentException("Meaning không được để trống");
+            }
+            if (meaning.Length > 500)
+            {
+                meaning = meaning.Substring(0, 500);
+                Console.WriteLine($"[VocabularyRepository] ⚠️ Meaning bị cắt xuống 500 ký tự: '{meaning}'");
+            }
+
+            var exampleSentence = word.ExampleSentence;
+            if (!string.IsNullOrEmpty(exampleSentence) && exampleSentence.Length > 500)
+            {
+                exampleSentence = exampleSentence.Substring(0, 500);
+                Console.WriteLine($"[VocabularyRepository] ⚠️ ExampleSentence bị cắt xuống 500 ký tự");
+            }
+
+            // KIỂM TRA RACE CONDITION: Có thể từ đã được tạo bởi request khác
+            var existingWord = await _context.Words
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.Character == character);
+            
+            if (existingWord != null)
+            {
+                Console.WriteLine($"[VocabularyRepository] ⚠️ Từ '{character}' đã tồn tại (race condition), trả về existing word với Id={existingWord.Id}");
+                return existingWord;
+            }
+
+            // Tạo Word mới để tránh tracking issues
+            var newWord = new Word
+            {
+                Character = character,
+                Pinyin = pinyin,
+                Meaning = meaning,
+                AudioUrl = word.AudioUrl,
+                ExampleSentence = exampleSentence,
+                HSKLevel = word.HSKLevel,
+                Frequency = word.Frequency,
+                StrokeCount = word.StrokeCount,
+                TopicId = word.TopicId,
+                CreatedAt = word.CreatedAt != default ? word.CreatedAt : DateTime.UtcNow
+            };
+
+            // Lưu Word (không lưu WordExamples ở đây)
+            _context.Words.Add(newWord);
+            await _context.SaveChangesAsync();
+            Console.WriteLine($"[VocabularyRepository] ✅ Đã lưu Word với Id={newWord.Id}");
+
+            // Reload để có đầy đủ thông tin
+            var savedWord = await _context.Words
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.Id == newWord.Id);
+
+            return savedWord ?? newWord;
+        }
+        catch (DbUpdateException dbEx)
+        {
+            Console.WriteLine($"[VocabularyRepository] ❌ Lỗi database khi thêm từ mới: {dbEx.Message}");
+            if (dbEx.InnerException != null)
+            {
+                Console.WriteLine($"[VocabularyRepository] InnerException: {dbEx.InnerException.Message}");
+            }
+            
+            // Nếu lỗi duplicate, thử lấy lại từ database (race condition)
+            if (dbEx.InnerException?.Message?.Contains("duplicate") == true || 
+                dbEx.InnerException?.Message?.Contains("UNIQUE") == true)
+            {
+                Console.WriteLine($"[VocabularyRepository] ⚠️ Detect duplicate error, thử lấy lại từ database");
+                var character = (word.Character ?? string.Empty).Trim();
+                var existingWord = await _context.Words
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(w => w.Character == character);
+                
+                if (existingWord != null)
+                {
+                    Console.WriteLine($"[VocabularyRepository] ✅ Tìm thấy existing word sau duplicate error, Id={existingWord.Id}");
+                    return existingWord;
+                }
+            }
+            
+            throw new Exception($"Lỗi khi thêm từ mới: {dbEx.Message}", dbEx);
         }
         catch (Exception ex)
         {
@@ -344,6 +475,14 @@ public class VocabularyRepository : IVocabularyRepository
             }
             throw new Exception($"Lỗi khi thêm WordExamples: {ex.Message}", ex);
         }
+    }
+
+    public async Task<List<int>> GetWordIdsByTopicIdAsync(int topicId)
+    {
+        return await _context.Words
+            .Where(w => w.TopicId == topicId)
+            .Select(w => w.Id)
+            .ToListAsync();
     }
 }
 

@@ -132,11 +132,14 @@ builder.Services.AddScoped<IQuestionRepository, QuestionRepository>();
 builder.Services.AddScoped<IUserProgressRepository, UserProgressRepository>();
 builder.Services.AddScoped<IVocabularyRepository, VocabularyRepository>();
 builder.Services.AddScoped<IUserWordProgressRepository, UserWordProgressRepository>();
+builder.Services.AddScoped<IWordClassificationRepository, WordClassificationRepository>();
+builder.Services.AddScoped<IActivityProgressRepository, ActivityProgressRepository>();
 
 // Register Services
 builder.Services.AddScoped<ICourseService, CourseService>();
 builder.Services.AddScoped<IVocabularyService, VocabularyService>();
 builder.Services.AddScoped<ISRSService, SRSService>();
+builder.Services.AddScoped<IWordClassificationService, WordClassificationService>();
 
 // Register AI Services
 builder.Services.AddHttpClient<GeminiService>();

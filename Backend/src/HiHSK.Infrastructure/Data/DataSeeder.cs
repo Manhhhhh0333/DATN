@@ -92,11 +92,8 @@ public class DataSeeder
                 {
                     word.Id = 0; // Let database generate ID
                     
-                    // Map lessonId từ lessonIndex (trong JSON) sang ID thực tế
-                    if (word.LessonId.HasValue && lessonIndexToIdMap.ContainsKey(word.LessonId.Value))
-                    {
-                        word.LessonId = lessonIndexToIdMap[word.LessonId.Value];
-                    }
+                    // LessonId đã bị xóa, chỉ sử dụng TopicId
+                    // TopicId sẽ được set sau khi seed LessonTopics hoặc thông qua word classification
                 }
                 await _context.Words.AddRangeAsync(seedData.Words);
                 await _context.SaveChangesAsync();
@@ -115,11 +112,8 @@ public class DataSeeder
                 {
                     word.Id = 0; // Let database generate ID
                     
-                    // Map lessonId từ lessonIndex (trong JSON) sang ID thực tế
-                    if (word.LessonId.HasValue && lessonIndexToIdMap.ContainsKey(word.LessonId.Value))
-                    {
-                        word.LessonId = lessonIndexToIdMap[word.LessonId.Value];
-                    }
+                    // LessonId đã bị xóa, chỉ sử dụng TopicId
+                    // TopicId sẽ được set sau khi seed LessonTopics hoặc thông qua word classification
                 }
                 await _context.Words.AddRangeAsync(seedData.Words);
                 await _context.SaveChangesAsync();

@@ -78,37 +78,60 @@ export const wordCache = new WordCache();
 /**
  * Extract các từ vựng từ WordExamples
  * Trả về danh sách các từ vựng duy nhất xuất hiện trong các ví dụ
+ * 
+ * Sử dụng segmenter để tách từ thông minh hơn thay vì extract từng ký tự
  */
 export function extractWordsFromExamples(
-  examples: Array<{ character: string; pinyin?: string; meaning?: string }>
+  examples: Array<{ character: string; pinyin?: string; meaning?: string }>,
+  allWords?: any[]
 ): string[] {
   const words = new Set<string>();
-  const chineseRegex = /[\u4e00-\u9fa5]+/g;
-
+  
+  // Import dynamic để tránh circular dependency
+  const segmentChineseText = require('./chineseSegmenter').segmentChineseText;
+  
   examples.forEach(example => {
     if (example.character) {
-      // Extract tất cả các ký tự Hán từ câu ví dụ
-      const matches = example.character.match(chineseRegex);
-      if (matches) {
-        matches.forEach(match => {
-          // Thêm từng ký tự riêng lẻ
-          for (let i = 0; i < match.length; i++) {
-            const char = match[i];
-            if (char && char.trim()) {
-              words.add(char.trim());
-            }
-          }
+      try {
+        // Sử dụng segmenter để tách từ (fallback, không dùng Jieba)
+        const segments = segmentChineseText(example.character, allWords || [], false);
+        
+        segments.forEach(segment => {
+          const cleanWord = segment.word.trim().replace(/[\s，。、！？：；,\.!?:;]+/g, "");
           
-          // Thêm các cụm từ 2-3 ký tự (nếu có)
-          for (let len = 2; len <= Math.min(3, match.length); len++) {
-            for (let i = 0; i <= match.length - len; i++) {
-              const word = match.substring(i, i + len);
-              if (word && word.trim()) {
-                words.add(word.trim());
-              }
-            }
+          // Chỉ thêm từ Hán (1-4 ký tự) - bỏ qua dấu câu, số, chữ cái Latin
+          if (/^[\u4e00-\u9fa5]{1,4}$/.test(cleanWord)) {
+            words.add(cleanWord);
           }
         });
+      } catch (error) {
+        // Fallback nếu segmenter fail: extract từng ký tự và cụm từ 2-3 ký tự
+        console.warn('[extractWordsFromExamples] Segmenter error, sử dụng fallback:', error);
+        
+        const chineseRegex = /[\u4e00-\u9fa5]+/g;
+        const matches = example.character.match(chineseRegex);
+        
+        if (matches) {
+          matches.forEach(match => {
+            // Thêm từng ký tự riêng lẻ
+            for (let i = 0; i < match.length; i++) {
+              const char = match[i];
+              if (char && char.trim()) {
+                words.add(char.trim());
+              }
+            }
+            
+            // Thêm các cụm từ 2-3 ký tự (nếu có)
+            for (let len = 2; len <= Math.min(3, match.length); len++) {
+              for (let i = 0; i <= match.length - len; i++) {
+                const word = match.substring(i, i + len);
+                if (word && word.trim()) {
+                  words.add(word.trim());
+                }
+              }
+            }
+          });
+        }
       }
     }
   });

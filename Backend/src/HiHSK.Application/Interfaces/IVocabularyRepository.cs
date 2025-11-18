@@ -15,5 +15,6 @@ public interface IVocabularyRepository
     Task<Word?> GetWordByIdAsync(int wordId);
     Task<Word> AddWordAsync(Word word);
     Task AddWordExamplesAsync(int wordId, List<WordExampleDto> examples);
+    Task<List<int>> GetWordIdsByTopicIdAsync(int topicId);
 }
 

@@ -8,13 +8,19 @@ public class SRSService : ISRSService
 {
     private readonly IUserWordProgressRepository _userProgressRepository;
     private readonly IVocabularyRepository _vocabularyRepository;
+    private readonly IUserProgressRepository _userProgressStatusRepository;
+    private readonly IActivityProgressRepository _activityProgressRepository;
 
     public SRSService(
         IUserWordProgressRepository userProgressRepository,
-        IVocabularyRepository vocabularyRepository)
+        IVocabularyRepository vocabularyRepository,
+        IUserProgressRepository userProgressStatusRepository,
+        IActivityProgressRepository activityProgressRepository)
     {
         _userProgressRepository = userProgressRepository;
         _vocabularyRepository = vocabularyRepository;
+        _userProgressStatusRepository = userProgressStatusRepository;
+        _activityProgressRepository = activityProgressRepository;
     }
 
     public async Task<UserWordProgressDto> UpdateReviewStatusAsync(string userId, int wordId, string rating)
@@ -55,6 +61,14 @@ public class SRSService : ISRSService
                 progress.NextReviewDate = CalculateNextReviewDate(progress, 1.3); // Easy = +30% interval
                 break;
 
+            case "mastered":
+            case "instant":
+                // Đánh dấu ngay lập tức là đã thuộc (dùng cho nút "Đánh dấu đã học")
+                progress.Status = "Mastered";
+                progress.CorrectCount = Math.Max(3, progress.CorrectCount); // Đảm bảo CorrectCount >= 3
+                progress.NextReviewDate = DateTime.UtcNow.AddDays(30); // Review lại sau 30 ngày
+                break;
+
             case "hard":
                 progress.WrongCount++;
                 if (progress.Status == "Mastered")
@@ -79,9 +93,14 @@ public class SRSService : ISRSService
 
         var updatedProgress = await _userProgressRepository.CreateOrUpdateProgressAsync(progress);
 
+        // Tự động cập nhật tiến độ lesson nếu từ vựng thuộc một lesson
+        await UpdateLessonProgressAsync(userId, wordId);
+
         return new UserWordProgressDto
         {
             Id = updatedProgress.Id,
+            UserId = updatedProgress.UserId,
+            WordId = updatedProgress.WordId,
             Status = updatedProgress.Status,
             NextReviewDate = updatedProgress.NextReviewDate,
             ReviewCount = updatedProgress.ReviewCount,
@@ -89,6 +108,68 @@ public class SRSService : ISRSService
             WrongCount = updatedProgress.WrongCount,
             LastReviewedAt = updatedProgress.LastReviewedAt
         };
+    }
+
+    /// <summary>
+    /// Tự động cập nhật tiến độ lesson khi từ vựng được đánh dấu đã học
+    /// </summary>
+    private async Task UpdateLessonProgressAsync(string userId, int wordId)
+    {
+        try
+        {
+            // Lấy thông tin word để biết nó thuộc lesson nào
+            var word = await _vocabularyRepository.GetWordByIdAsync(wordId);
+            if (word == null || !word.TopicId.HasValue)
+                return; // Không có topic, không cần cập nhật
+
+            var topicId = word.TopicId.Value;
+
+            // Lấy tất cả từ vựng trong topic
+            var topicWordIds = await _vocabularyRepository.GetWordIdsByTopicIdAsync(topicId);
+
+            if (topicWordIds.Count == 0)
+                return; // Không có từ vựng trong topic
+
+            // Lấy progress của tất cả từ vựng trong topic cho user này
+            var wordProgresses = await _userProgressRepository.GetUserWordProgressesByWordIdsAsync(userId, topicWordIds);
+
+            // Tính toán tiến độ: số từ đã học (Learning hoặc Mastered) / tổng số từ
+            var learnedWords = wordProgresses.Count(uwp => 
+                uwp.Status == "Learning" || uwp.Status == "Mastered");
+            
+            var totalWords = topicWordIds.Count;
+            var progressPercentage = totalWords > 0 
+                ? (int)Math.Round((double)learnedWords / totalWords * 100) 
+                : 0;
+
+            // TODO: Cập nhật tiến độ topic thay vì lesson
+            // Note: CreateOrUpdateUserLessonStatusAsync vẫn dùng LessonId, cần tạo method mới cho TopicId
+            // Tạm thời comment out vì UserLessonStatus vẫn dùng LessonId
+            // Xác định trạng thái topic
+            // string status;
+            // if (progressPercentage == 100)
+            // {
+            //     status = "Completed";
+            // }
+            // else if (progressPercentage > 0)
+            // {
+            //     status = "InProgress";
+            // }
+            // else
+            // {
+            //     status = "NotStarted";
+            // }
+            // await _userProgressStatusRepository.CreateOrUpdateUserLessonStatusAsync(
+            //     userId, 
+            //     topicId, 
+            //     status, 
+            //     progressPercentage);
+        }
+        catch (Exception ex)
+        {
+            // Log lỗi nhưng không throw để không ảnh hưởng đến việc cập nhật từ vựng
+            Console.WriteLine($"[SRSService] Lỗi khi cập nhật tiến độ lesson: {ex.Message}");
+        }
     }
 
     public async Task<List<FlashcardReviewDto>> GetWordsDueForReviewAsync(string userId, int? topicId = null, int? limit = null)
@@ -109,6 +190,8 @@ public class SRSService : ISRSService
                 Progress = new UserWordProgressDto
                 {
                     Id = progress.Id,
+                    UserId = progress.UserId,
+                    WordId = progress.WordId,
                     Status = progress.Status,
                     NextReviewDate = progress.NextReviewDate,
                     ReviewCount = progress.ReviewCount,

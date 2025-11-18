@@ -5,56 +5,38 @@ import Link from "next/link";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import { topicService } from "@/lib/services/topicService";
-import { vocabularyService } from "@/lib/services/vocabularyService";
-import { LessonTopicListDto, VocabularyTopicDto } from "@/types";
-
-type TopicItem = LessonTopicListDto | VocabularyTopicDto;
+import { LessonTopicListDto } from "@/types";
 
 export default function CoursesPage() {
-  const [topics, setTopics] = useState<TopicItem[]>([]);
+  const [topics, setTopics] = useState<LessonTopicListDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedHSKLevel, setSelectedHSKLevel] = useState<number | undefined>(undefined);
-  const [topicType, setTopicType] = useState<"lesson" | "vocabulary" | "parts">("lesson");
 
   useEffect(() => {
     if (selectedHSKLevel) {
-      // Tất cả HSK levels hiển thị 10 phần từ vựng
-      setTopicType("parts");
+      // Hiển thị lessons/topics của HSK level được chọn
       setTopics([]);
+      loadLessonTopicsByHSKLevel(selectedHSKLevel);
     } else {
       setTopics([]);
-      setTopicType("lesson");
     }
   }, [selectedHSKLevel]);
 
   const loadLessonTopicsByHSKLevel = async (hskLevel: number) => {
     try {
       setLoading(true);
+      console.log("Loading lessons for HSK level:", hskLevel);
       const data = await topicService.getTopicsByHSKLevel(hskLevel);
-      setTopics(data);
-    } catch (error) {
+      console.log("Loaded lessons data:", data);
+      setTopics(data || []);
+    } catch (error: any) {
       console.error("Error loading lesson topics:", error);
-      setTopics([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadVocabularyTopics = async () => {
-    try {
-      setLoading(true);
-      const allTopics = await vocabularyService.getAllTopics();
-      // Lọc các Vocabulary Topics liên quan đến HSK1 (có thể theo tên hoặc description)
-      // Hiện tại lấy tất cả, sau này có thể filter theo HSK level nếu có field này
-      const hsk1Topics = allTopics.filter(topic => 
-        topic.name?.toLowerCase().includes("hsk 1") || 
-        topic.name?.toLowerCase().includes("hsk1") ||
-        topic.description?.toLowerCase().includes("hsk 1") ||
-        topic.description?.toLowerCase().includes("hsk1")
-      );
-      setTopics(hsk1Topics.length > 0 ? hsk1Topics : allTopics);
-    } catch (error) {
-      console.error("Error loading vocabulary topics:", error);
+      console.error("Error details:", {
+        message: error?.message,
+        response: error?.response?.data,
+        status: error?.response?.status,
+        url: error?.config?.url
+      });
       setTopics([]);
     } finally {
       setLoading(false);
@@ -148,81 +130,35 @@ export default function CoursesPage() {
             ) : loading ? (
               <div className="text-center py-12">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-                <p className="text-gray-600">Đang tải danh sách chủ đề...</p>
-              </div>
-            ) : topicType === "parts" && selectedHSKLevel ? (
-              <div>
-                <h2 className="text-2xl font-bold text-dark mb-2">
-                  {hskLevels.find(h => h.level === selectedHSKLevel)?.name} - 150 từ vựng
-                </h2>
-                <p className="text-gray-600 mb-6">
-                  Chọn phần để học 15 từ vựng (150 từ được chia thành 10 phần)
-                </p>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map((partNumber) => (
-                    <Link
-                      key={partNumber}
-                      href={`/hsk-vocabulary/${selectedHSKLevel}/part/${partNumber}`}
-                      className="block bg-white rounded-lg shadow-md transition-all duration-300 p-6 text-center hover:shadow-xl hover:-translate-y-1"
-                    >
-                      <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-3">
-                        <span className="text-2xl font-bold text-primary">{partNumber}</span>
-                      </div>
-                      <h3 className="text-lg font-bold text-dark mb-2">Phần {partNumber}</h3>
-                      <p className="text-sm text-gray-600">15 từ vựng</p>
-                    </Link>
-                  ))}
-                </div>
+                <p className="text-gray-600">Đang tải danh sách bài học...</p>
               </div>
             ) : topics.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-xl text-gray-600 mb-4">
-                  {topicType === "vocabulary" 
-                    ? `Chưa có chủ đề từ vựng nào cho HSK ${selectedHSKLevel}`
-                    : `Chưa có chủ đề bài học nào cho HSK ${selectedHSKLevel}`
-                  }
+                  Chưa có bài học nào cho HSK {selectedHSKLevel}
                 </p>
-                {topicType === "vocabulary" && (
-                  <p className="text-gray-500">
-                    Vui lòng seed dữ liệu Vocabulary Topic cho HSK1
-                  </p>
-                )}
+                <p className="text-gray-500">
+                  Vui lòng kiểm tra lại hoặc thử lại sau
+                </p>
               </div>
             ) : (
               <div>
                 <h2 className="text-2xl font-bold text-dark mb-2">
-                  {topicType === "vocabulary" 
-                    ? `Chủ đề từ vựng - ${hskLevels.find(h => h.level === selectedHSKLevel)?.name}`
-                    : `Chủ đề bài học - ${hskLevels.find(h => h.level === selectedHSKLevel)?.name}`
-                  }
+                  {hskLevels.find(h => h.level === selectedHSKLevel)?.name} - Danh sách bài học
                 </h2>
-                {topicType === "vocabulary" && (
-                  <p className="text-gray-600 mb-6">
-                    Chọn chủ đề từ vựng để bắt đầu học với Flashcard và SRS
-                  </p>
-                )}
+                <p className="text-gray-600 mb-6">
+                  Chọn bài học để bắt đầu học từ vựng và làm bài tập
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {topics.map((topic) => {
-                    // Kiểm tra xem là VocabularyTopic hay LessonTopic
-                    const isVocabularyTopic = topicType === "vocabulary";
-                    const vocabTopic = topic as VocabularyTopicDto;
+                    // Tất cả topics ở đây đều là LessonTopicListDto
                     const lessonTopic = topic as LessonTopicListDto;
 
-                    const topicLink = isVocabularyTopic 
-                      ? `/vocabulary/${topic.id}`
-                      : `/topics/${topic.id}`;
+                    const topicLink = `/topics/${lessonTopic.id}`;
 
-                    const topicTitle = isVocabularyTopic 
-                      ? vocabTopic.name 
-                      : lessonTopic.title;
-
-                    const topicDescription = isVocabularyTopic 
-                      ? vocabTopic.description 
-                      : lessonTopic.description;
-
-                    const wordCount = isVocabularyTopic 
-                      ? vocabTopic.wordCount || 0
-                      : lessonTopic.totalWords || 0;
+                    const topicTitle = lessonTopic.title;
+                    const topicDescription = lessonTopic.description;
+                    const wordCount = lessonTopic.totalWords || 0;
 
                     return (
                       <Link
@@ -234,7 +170,7 @@ export default function CoursesPage() {
                           <div className="flex-1">
                             <div className="flex items-center gap-3 mb-2">
                               <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold bg-primary/20 text-primary">
-                                {isVocabularyTopic ? "📚" : (lessonTopic.isLocked ? "🔒" : lessonTopic.topicIndex)}
+                                {lessonTopic.isLocked ? "🔒" : lessonTopic.topicIndex}
                               </div>
                               <h3 className="text-lg font-bold text-dark">
                                 {topicTitle}
@@ -246,14 +182,12 @@ export default function CoursesPage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-4 text-sm text-gray-500 mb-3">
-                          {!isVocabularyTopic && (
-                            <span className="flex items-center">
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                              </svg>
-                              {lessonTopic.totalExercises || 0} bài tập
-                            </span>
-                          )}
+                          <span className="flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                            {lessonTopic.totalExercises || 0} bài tập
+                          </span>
                           <span className="flex items-center">
                             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -261,7 +195,7 @@ export default function CoursesPage() {
                             {wordCount} từ vựng
                           </span>
                         </div>
-                        {!isVocabularyTopic && lessonTopic.progressPercentage > 0 && (
+                        {lessonTopic.progressPercentage > 0 && (
                           <div className="mb-2">
                             <div className="flex justify-between text-xs text-gray-600 mb-1">
                               <span>Tiến độ</span>
@@ -276,10 +210,7 @@ export default function CoursesPage() {
                           </div>
                         )}
                         <div className="text-primary font-semibold text-sm mt-3">
-                          {isVocabularyTopic 
-                            ? "Học từ vựng →" 
-                            : (lessonTopic.isLocked ? "🔒 Đã khóa" : "Bắt đầu →")
-                          }
+                          {lessonTopic.isLocked ? "🔒 Đã khóa" : "Bắt đầu →"}
                         </div>
                       </Link>
                     );

@@ -66,6 +66,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<UserLessonStatus> UserLessonStatuses { get; set; }
     public DbSet<UserCourseStatus> UserCourseStatuses { get; set; }
     public DbSet<UserDialogueProgress> UserDialogueProgresses { get; set; }
+    public DbSet<UserActivityProgress> UserActivityProgresses { get; set; }
     public DbSet<UserReadingProgress> UserReadingProgresses { get; set; }
     public DbSet<UserReadingWordMark> UserReadingWordMarks { get; set; }
     public DbSet<UserRadicalProgress> UserRadicalProgresses { get; set; }
@@ -186,10 +187,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .HasForeignKey(e => e.PrerequisiteTopicId)
                 .OnDelete(DeleteBehavior.NoAction);
 
-            // Ignore navigation property Words vì column TopicId chưa tồn tại trong database
-            // Nếu không ignore, EF sẽ tự động tạo shadow property TopicId1
-            // Khi nào có column TopicId trong database, bỏ ignore này và cấu hình relationship ở phía Word
-            entity.Ignore(e => e.Words);
+            entity.HasMany(e => e.Words)
+                .WithOne(w => w.Topic)
+                .HasForeignKey(w => w.TopicId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(e => new { e.HSKLevel, e.TopicIndex });
             entity.HasIndex(e => e.PrerequisiteTopicId);
@@ -249,23 +250,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
                 .IsRequired()
                 .HasDefaultValueSql("GETDATE()");
 
-            entity.HasOne(e => e.Lesson)
-                .WithMany(l => l.Words)
-                .HasForeignKey(e => e.LessonId)
+            entity.HasOne(e => e.Topic)
+                .WithMany(t => t.Words)
+                .HasForeignKey(e => e.TopicId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            // TopicId relationship với LessonTopic
-            // LƯU Ý: Column TopicId chưa tồn tại trong database
-            // Cần tạo migration để thêm column TopicId vào bảng Words trước khi sử dụng
-            // Tạm thời ignore để tránh lỗi, nhưng cấu hình relationship ở phía LessonTopic
-            entity.Ignore(e => e.TopicId);
-            entity.Ignore(e => e.Topic);
-            
-            // Relationship được cấu hình ở phía LessonTopic để tránh EF tạo shadow property TopicId1
-
-            entity.HasIndex(e => e.LessonId);
             entity.HasIndex(e => e.HSKLevel);
             entity.HasIndex(e => e.Character);
+            entity.HasIndex(e => e.TopicId);
         });
 
         // ============ WORD EXAMPLE ============
@@ -923,6 +915,40 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             entity.HasIndex(e => new { e.UserId, e.DialogueId }).IsUnique();
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.DialogueId);
+        });
+
+        // ============ USER ACTIVITY PROGRESS ============
+        builder.Entity<UserActivityProgress>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.UserId)
+                .IsRequired()
+                .HasMaxLength(450);
+            entity.Property(e => e.ActivityId)
+                .IsRequired()
+                .HasMaxLength(100);
+            entity.Property(e => e.IsCompleted)
+                .IsRequired()
+                .HasDefaultValue(false);
+            entity.Property(e => e.CreatedAt)
+                .IsRequired()
+                .HasDefaultValueSql("GETDATE()");
+            entity.Property(e => e.UpdatedAt)
+                .IsRequired()
+                .HasDefaultValueSql("GETDATE()");
+
+            // Unique constraint: User chỉ có 1 record cho mỗi activity của 1 part/topic
+            entity.HasIndex(e => new { e.UserId, e.HskLevel, e.PartNumber, e.ActivityId })
+                .IsUnique()
+                .HasFilter("[HskLevel] IS NOT NULL AND [PartNumber] IS NOT NULL");
+            
+            entity.HasIndex(e => new { e.UserId, e.TopicId, e.ActivityId })
+                .IsUnique()
+                .HasFilter("[TopicId] IS NOT NULL");
+            
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => new { e.HskLevel, e.PartNumber });
+            entity.HasIndex(e => e.TopicId);
         });
 
         // ============ USER READING PROGRESS ============

@@ -8,6 +8,7 @@ import {
   UpdateReviewStatusRequest,
   UserWordProgress,
   WordWithProgressDto,
+  PartProgressDto,
 } from "../../types";
 
 export const vocabularyService = {
@@ -99,31 +100,83 @@ export const vocabularyService = {
     partNumber: number
   ): Promise<WordWithProgressDto[]> {
     const response = await apiClient.get<WordWithProgressDto[]>(
-      API_ENDPOINTS.HSK_VOCABULARY.BY_HSK_AND_PART(hskLevel, partNumber)
+      API_ENDPOINTS.COURSES.WORDS_BY_HSK_AND_PART(hskLevel, partNumber)
     );
     return response.data;
   },
 
   /**
-   * Lấy hoặc tạo từ vựng theo character
-   * Nếu từ đã có trong database → trả về chi tiết từ đó
-   * Nếu chưa có → gọi API để tạo từ mới bằng AI
+   * Lấy từ vựng theo ID
    */
-  async getOrCreateWordByCharacter(character: string): Promise<WordWithProgressDto> {
+  async getWordById(id: number): Promise<WordWithProgressDto> {
     const response = await apiClient.get<WordWithProgressDto>(
-      API_ENDPOINTS.HSK_VOCABULARY.BY_CHARACTER(character)
+      `/api/vocabularytopics/words/${id}`
     );
     return response.data;
   },
 
   /**
-   * Lấy hoặc tạo nhiều từ vựng cùng lúc (batch)
-   * Tối ưu hơn khi cần lấy nhiều từ từ WordExamples
+   * Lấy hoặc tạo từ vựng theo ký tự (với retry logic)
+   */
+  async getOrCreateWordByCharacter(character: string, maxRetries = 3): Promise<WordWithProgressDto> {
+    let lastError: any = null;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        console.log(`[VocabularyService] Attempt ${attempt + 1}/${maxRetries} for "${character}"`);
+        
+        const response = await apiClient.post<WordWithProgressDto>(
+          `/api/vocabularytopics/words/get-or-create`,
+          { character }
+        );
+        
+        console.log(`[VocabularyService] ✅ Success on attempt ${attempt + 1}`);
+        return response.data;
+      } catch (error: any) {
+        lastError = error;
+        console.error(`[VocabularyService] ❌ Attempt ${attempt + 1} failed:`, error.message);
+        
+        // Nếu là lỗi client (4xx), không retry
+        if (error.response?.status >= 400 && error.response?.status < 500 && error.response?.status !== 429) {
+          console.error(`[VocabularyService] Client error (${error.response.status}), not retrying`);
+          throw error;
+        }
+        
+        // Nếu còn lần retry, đợi exponential backoff
+        if (attempt < maxRetries - 1) {
+          const delay = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+          console.log(`[VocabularyService] ⏳ Waiting ${delay}ms before retry...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    // Hết retry, throw error cuối cùng
+    console.error(`[VocabularyService] ❌ All ${maxRetries} attempts failed for "${character}"`);
+    throw lastError || new Error(`Failed to get/create word after ${maxRetries} attempts`);
+  },
+
+  /**
+   * Lấy hoặc tạo nhiều từ vựng theo danh sách ký tự
    */
   async getOrCreateWordsBatch(characters: string[]): Promise<Record<string, WordWithProgressDto>> {
     const response = await apiClient.post<Record<string, WordWithProgressDto>>(
-      API_ENDPOINTS.HSK_VOCABULARY.BATCH,
+      `/api/vocabularytopics/words/get-or-create-batch`,
       { characters }
+    );
+    return response.data;
+  },
+
+  /**
+   * Đánh dấu từ vựng là đã học
+   */
+  async markAsLearned(wordId: number): Promise<UserWordProgress> {
+    const response = await apiClient.post<UserWordProgress>(
+      API_ENDPOINTS.VOCABULARY_TOPICS.UPDATE_REVIEW,
+      {
+        WordId: wordId,
+        Rating: "Mastered",
+      }
     );
     return response.data;
   },

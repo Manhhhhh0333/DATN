@@ -14,11 +14,20 @@ namespace HiHSK.Infrastructure.Migrations
             migrationBuilder.Sql(@"
                 IF NOT EXISTS (SELECT 1 FROM VocabularyTopics WHERE Id = 1)
                 BEGIN
-                    SET IDENTITY_INSERT VocabularyTopics ON;
-                    INSERT INTO VocabularyTopics (Id, Name, Description, ImageUrl, SortOrder)
-                    VALUES (1, N'HSK 1', N'Từ vựng HSK Cấp độ 1 - 150 từ vựng cơ bản', NULL, 1);
-                    SET IDENTITY_INSERT VocabularyTopics OFF;
+                    SET IDENTITY_INSERT [VocabularyTopics] ON;
                 END
+            ");
+            
+            migrationBuilder.Sql(@"
+                IF NOT EXISTS (SELECT 1 FROM VocabularyTopics WHERE Id = 1)
+                BEGIN
+                    INSERT INTO [VocabularyTopics] (Id, Name, Description, ImageUrl, SortOrder)
+                    VALUES (1, N'HSK 1', N'Từ vựng HSK Cấp độ 1 - 150 từ vựng cơ bản', NULL, 1);
+                END
+            ");
+            
+            migrationBuilder.Sql(@"
+                SET IDENTITY_INSERT [VocabularyTopics] OFF;
             ");
 
             // Seed WordVocabularyTopics - Gán tất cả từ vựng HSK1 vào Vocabulary Topic HSK1

@@ -23,6 +23,8 @@ public class WordWithProgressDto : WordDto
 public class UserWordProgressDto
 {
     public int Id { get; set; }
+    public string UserId { get; set; } = string.Empty;
+    public int WordId { get; set; }
     public string Status { get; set; } = "New"; // 'New', 'Learning', 'Mastered', 'Reviewing'
     public DateTime NextReviewDate { get; set; }
     public int ReviewCount { get; set; }
